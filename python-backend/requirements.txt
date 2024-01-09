@@ -1,0 +1,4 @@
+requests==2.31.0
+dotenv==1.0.0
+mysql-connector-python==8.2.0
+snownlp==0.12.3
