@@ -1,6 +1,7 @@
 # Import all the necessary modules
 import json
 import os
+import time
 import requests # Version: 2.31.0
 from dotenv import load_dotenv # Version: 1.0.0
 import mysql.connector # Version: 8.2.0
@@ -8,6 +9,7 @@ from mysql.connector import Error
 import datetime
 from snownlp import SnowNLP # Version: 0.12.3
 import yfinance as yf # Version 0.2.33
+from googletrans import Translator # Version 4.0.0rc1
 
 # Load environmental variables from .env file within python-backend
 load_dotenv()
@@ -15,6 +17,8 @@ host = os.getenv("DB_HOST")
 user = os.getenv("DB_USER")
 password = os.getenv("DB_PASSWORD")
 database = os.getenv("DB_NAME")
+
+finmind_key = os.getenv('FINMIND_KEY')
 
 # String for creating table
 create_newstable = """
@@ -42,6 +46,7 @@ CREATE TABLE IF NOT EXISTS stocks (
     shortname VARCHAR(50),
     longname VARCHAR(100),
     english_name VARCHAR(100),
+    businesssummary TEXT,
     longbusinesssummary TEXT,
     exchange VARCHAR(25),
     country VARCHAR(50),
@@ -72,6 +77,53 @@ CREATE TABLE IF NOT EXISTS stocks (
     fiftytwoweekhigh FLOAT,
     PRIMARY KEY (symbol)
 )
+"""
+create_balancesheettable = """
+CREATE TABLE IF NOT EXISTS balancesheets(
+    symbol VARCHAR(10) NOT NULL,
+    date DATE NOT NULL,
+    cashandcashequivalents FLOAT,
+    cashandcashequivalents_per FLOAT,
+    currentfinancialassetsatfairvaluethroughprofitorloss FLOAT,
+    currentfinancialassetsatfairvaluethroughprofitorloss_per FLOAT,
+    currentfinancialassetsatfairvaluethroughotherincome FLOAT,
+    currentfinancialassetsatfairvaluethroughotherincome_per FLOAT,
+    financialassetsatamortizedcostnoncurrent FLOAT,
+    financialassetsatamortizedcostnoncurrent_per FLOAT,
+    otherreceivable FLOAT,
+    otherreceivable_per FLOAT,
+    accountsreceivablenet FLOAT,
+    accountsreceivablenet_per FLOAT,
+    inventories FLOAT,
+    inventories_per FLOAT,
+    othercurrentassets FLOAT,
+    othercurrentassets_per FLOAT,
+    investmentaccountedforusingequitymethod FLOAT,
+    investmentaccountedforusingequitymethod_per FLOAT,
+    propertyplantandequipment FLOAT,
+    propertyplantandequipment_per FLOAT,
+    rightofuseasset FLOAT,
+    rightofuseasset_per FLOAT,
+    intangibleassets FLOAT,
+    intangibleassets_per FLOAT,
+    deferredtaxassets FLOAT,
+    deferredtaxassets_per FLOAT,
+    othernoncurrentassets FLOAT,
+    othernoncurrentassets_per FLOAT,
+    noncurrentassets FLOAT,
+    noncurrentassets_per FLOAT,
+    totalassets FLOAT,
+    totalassets_per FLOAT,
+    shorttermborrowings FLOAT,
+    shorttermborrowings_per FLOAT,
+    accountspayable FLOAT,
+    accountspayable_per FLOAT,
+    otherpayables FLOAT,
+    otherpayables_per FLOAT,
+    currenttaxliabilities FLOAT,
+    currenttaxliabilities_per FLOAT,
+    PRIMARY KEY (symbol)
+);
 """
 
 # Method for connecting to mySQL database
@@ -111,6 +163,12 @@ def execute_read_query(connection, table, query = None):
         return result
     except Error as e:
         print(f"The error '{e}' occurred")
+
+# Method for translating text using googletrans
+def translate_text(text, target_language = 'zh-tw'):
+    translator = Translator()
+    translation = translator.translate(text, dest = target_language)
+    return translation.text
 
 # Method for retrieving news articles
 def retrieve_news(page = ''):
@@ -153,6 +211,8 @@ def update_news(connection):
         new_news = list(news_id_set - article_id_set)
         news_data = [entry for entry in news for key, value in entry.items() if key == 'article_id' and value in new_news]
         for entry in news_data:
+            if entry['content'] == None or entry['article_id'] == None: # if one of these does not exist, do not proceed into loop
+                break
             for key, value in entry.items():
                 if key == 'article_id':
                     article_id = value
@@ -199,7 +259,7 @@ def update_news(connection):
                 elif key == 'content':
                     content = value
 
-                # Prepare strings outside the f-string
+            # Prepare strings outside the f-string
             title_safe = title.replace("'", "''")
             description_safe = description.replace("'", "''")
             content_safe = content.replace("'", "''")
@@ -228,7 +288,7 @@ def update_news(connection):
             );
             """
             execute_query(connection, insert) # insert values into table
-
+    
 # Method to retrieve basic information for API
 def retrieve_stocks(url, p = None):
     response = requests.get(url, params = p)
@@ -249,6 +309,11 @@ def update_stocks(connection):
                 ystock = yf.Ticker(symbol_query).info
                 # Acquire corresponding data from yfinance
                 longbusinesssummary = ystock.get('longBusinessSummary', None).replace("'", "''") if ystock.get('longBusinessSummary') else None
+                if longbusinesssummary == None:
+                    businesssummary = None
+                else:
+                    yf_longname = ystock.get('longName', None) if ystock.get('longName') else None
+                    summary = longbusinesssummary
                 exchange = ystock.get('exchange', None).replace("'", "''") if ystock.get('exchange') else None
                 country = ystock.get('country', None).replace("'", "''") if ystock.get('country') else None
                 english_address = str(ystock.get('address1', '') + ' ' + ystock.get('address2', '')).strip().replace("'", "''") if ystock.get('address1') or ystock.get('address2') else None
@@ -275,6 +340,9 @@ def update_stocks(connection):
                 date = f"{year}-{month}-{day}"
             elif key == '公司簡稱':
                 shortname = stock[key].replace("'", "''")
+                if longbusinesssummary != None:
+                    summary_modified = summary.replace(yf_longname, shortname)
+                    businesssummary = translate_text(summary_modified).replace("'", "''")# Translate for chinese businesssummary
             elif key == '公司名稱':
                 longname = stock[key].replace("'", "''")
             elif key == '英文簡稱':
@@ -299,13 +367,14 @@ def update_stocks(connection):
                 acting_spokesperson = stock[key].strip().replace("'", "''")
         insert = f"""
         INSERT INTO stocks (
-            symbol, date, shortname, longname, english_name, longbusinesssummary, exchange, country, website, address, english_address, zip, sector, industry, industrykey, email, phone, fax, chairman, ceo, spokesperson, acting_spokesperson, currentprice, dayhigh, daylow, volume, regularmarketvolume, marketcap, enterprisevalue, trailingpe, forwardpe, fiftytwoweeklow, fiftytwoweekhigh
+            symbol, date, shortname, longname, english_name, businesssummary, longbusinesssummary, exchange, country, website, address, english_address, zip, sector, industry, industrykey, email, phone, fax, chairman, ceo, spokesperson, acting_spokesperson, currentprice, dayhigh, daylow, volume, regularmarketvolume, marketcap, enterprisevalue, trailingpe, forwardpe, fiftytwoweeklow, fiftytwoweekhigh
         ) VALUES (
             '{symbol}', 
             '{date}',
             {f"'{shortname}'" if shortname else 'NULL'},
             {f"'{longname}'" if longname else 'NULL'},
             {f"'{english_name}'" if english_name else 'NULL'},
+            {f"'{businesssummary}'" if businesssummary else 'NULL'},
             {f"'{longbusinesssummary}'" if longbusinesssummary else 'NULL'},
             {f"'{exchange}'" if exchange else 'NULL'},
             {f"'{country}'" if country else 'NULL'},
@@ -340,6 +409,7 @@ def update_stocks(connection):
             shortname = VALUES(shortname),
             longname = VALUES(longname),
             english_name = VALUES(english_name),
+            businesssummary = VALUES(businesssummary),
             longbusinesssummary = VALUES(longbusinesssummary),
             exchange = VALUES(exchange),
             country = VALUES(country),
@@ -371,13 +441,175 @@ def update_stocks(connection):
         """
         execute_query(connection, insert)
         count += 1
+
+# Method to retrieve balancesheet
+def update_balancesheet(connection):
+    stock_ls = [entry['symbol'] for entry in execute_read_query(connection, "stocks", "SELECT symbol FROM stocks;")]
+    count = 1
+    max_retries = 5 # set maximum retries
+    retry_delay = 0.5 # in minutes
+    for stock in stock_ls:
+        status = 402
+        retries = 0
+        while status == 402 and retries < max_retries: # if msg request failed and retries < max_retries
+            print(f"Retrieving {count} of {len(stock_ls)}, symbol: {stock}")
+            url = "https://api.finmindtrade.com/api/v4/data"
+            param = {
+                'dataset':"TaiwanStockBalanceSheet",
+                'data_id':stock,
+                'start_date':'1990-01-01',
+                'token':finmind_key
+            }
+            balance_data = retrieve_stocks(url, param)
+            status = balance_data.get('status')
+            msg = balance_data.get('msg')
+            if status == 200:
+                break
+            print(f"Retrieval failed\nStatus:{status} Msg:{msg}\nRetrying again in {retry_delay} minutes")
+            time.sleep(retry_delay*60)
+            retries += 1
+        else:
+            raise Exception("Retrieval of balance sheet data failed even after max retries have been reached")
+
+        # Columns list
+        columns_list = [
+            'CashAndCashEquivalents',
+            'CashAndCashEquivalents_per',
+            'CurrentFinancialAssetsAtFairvalueThroughProfitOrLoss',
+            'CurrentFinancialAssetsAtFairvalueThroughProfitOrLoss_per',
+            'CurrentFinancialAssetsAtFairvalueThroughOtherIncome',
+            'CurrentFinancialAssetsAtFairvalueThroughOtherIncome_per',
+            'FinancialAssetsAtAmortizedCostNonCurrent',
+            'FinancialAssetsAtAmortizedCostNonCurrent_per',
+            'OtherReceivable',
+            'OtherReceivable_per',
+            'AccountsReceivableNet',
+            'AccountsReceivableNet_per',
+            'Inventories',
+            'Inventories_per',
+            'OtherCurrentAssets',
+            'OtherCurrentAssets_per',
+            'InvestmentAccountedForUsingEquityMethod',
+            'InvestmentAccountedForUsingEquityMethod_per',
+            'PropertyPlantAndEquipment',
+            'PropertyPlantAndEquipment_per',
+            'RightOfUseAsset',
+            'RightOfUseAsset_per',
+            'IntangibleAssets',
+            'IntangibleAssets_per',
+            'DeferredTaxAssets',
+            'DeferredTaxAssets_per',
+            'OtherNoncurrentAssets',
+            'OtherNoncurrentAssets_per',
+            'NoncurrentAssets',
+            'NoncurrentAssets_per',
+            'TotalAssets',
+            'TotalAssets_per',
+            'ShorttermBorrowings',
+            'ShorttermBorrowings_per',
+            'AccountsPayable',
+            'AccountsPayable_per',
+            'OtherPayables',
+            'OtherPayables_per',
+            'CurrentTaxLiabilities',
+            'CurrentTaxLiabilities_per'
+        ]
+        figures = {type.lower():None for type in columns_list} # initialize empty dictionary
+        # Writing the values into variables
+        balance_sheet = balance_data['data']
+        for entry in balance_sheet:
+            for key, value in entry.items():
+                if key == 'date':
+                    date = value
+                elif key == 'stock_id':
+                    symbol = value
+                elif key == 'type':
+                    if value in columns_list:
+                        type = value.lower()
+                        figures[type] = float(entry['value'])
+            insert_sql = f"""
+                INSERT INTO balancesheets (
+                    symbol, date, cashandcashequivalents, cashandcashequivalents_per,
+                    currentfinancialassetsatfairvaluethroughprofitorloss, currentfinancialassetsatfairvaluethroughprofitorloss_per,
+                    currentfinancialassetsatfairvaluethroughotherincome, currentfinancialassetsatfairvaluethroughotherincome_per,
+                    financialassetsatamortizedcostnoncurrent, financialassetsatamortizedcostnoncurrent_per,
+                    otherreceivable, otherreceivable_per, accountsreceivablenet, accountsreceivablenet_per,
+                    inventories, inventories_per, othercurrentassets, othercurrentassets_per,
+                    investmentaccountedforusingequitymethod, investmentaccountedforusingequitymethod_per,
+                    propertyplantandequipment, propertyplantandequipment_per, rightofuseasset, rightofuseasset_per,
+                    intangibleassets, intangibleassets_per, deferredtaxassets, deferredtaxassets_per,
+                    othernoncurrentassets, othernoncurrentassets_per, noncurrentassets, noncurrentassets_per,
+                    totalassets, totalassets_per, shorttermborrowings, shorttermborrowings_per,
+                    accountspayable, accountspayable_per, otherpayables, otherpayables_per,
+                    currenttaxliabilities, currenttaxliabilities_per
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s
+                ) ON DUPLICATE KEY UPDATE
+                cashandcashequivalents = COALESCE(VALUES(cashandcashequivalents), cashandcashequivalents),
+                cashandcashequivalents_per = COALESCE(VALUES(cashandcashequivalents_per), cashandcashequivalents_per),
+                currentfinancialassetsatfairvaluethroughprofitorloss = COALESCE(VALUES(currentfinancialassetsatfairvaluethroughprofitorloss), currentfinancialassetsatfairvaluethroughprofitorloss),
+                currentfinancialassetsatfairvaluethroughprofitorloss_per = COALESCE(VALUES(currentfinancialassetsatfairvaluethroughprofitorloss_per), currentfinancialassetsatfairvaluethroughprofitorloss_per),
+                currentfinancialassetsatfairvaluethroughotherincome = COALESCE(VALUES(currentfinancialassetsatfairvaluethroughotherincome), currentfinancialassetsatfairvaluethroughotherincome),
+                currentfinancialassetsatfairvaluethroughotherincome_per = COALESCE(VALUES(currentfinancialassetsatfairvaluethroughotherincome_per), currentfinancialassetsatfairvaluethroughotherincome_per),
+                financialassetsatamortizedcostnoncurrent = COALESCE(VALUES(financialassetsatamortizedcostnoncurrent), financialassetsatamortizedcostnoncurrent),
+                financialassetsatamortizedcostnoncurrent_per = COALESCE(VALUES(financialassetsatamortizedcostnoncurrent_per), financialassetsatamortizedcostnoncurrent_per),
+                otherreceivable = COALESCE(VALUES(otherreceivable), otherreceivable),
+                otherreceivable_per = COALESCE(VALUES(otherreceivable_per), otherreceivable_per),
+                accountsreceivablenet = COALESCE(VALUES(accountsreceivablenet), accountsreceivablenet),
+                accountsreceivablenet_per = COALESCE(VALUES(accountsreceivablenet_per), accountsreceivablenet_per),
+                inventories = COALESCE(VALUES(inventories), inventories),
+                inventories_per = COALESCE(VALUES(inventories_per), inventories_per),
+                othercurrentassets = COALESCE(VALUES(othercurrentassets), othercurrentassets),
+                othercurrentassets_per = COALESCE(VALUES(othercurrentassets_per), othercurrentassets_per),
+                investmentaccountedforusingequitymethod = COALESCE(VALUES(investmentaccountedforusingequitymethod), investmentaccountedforusingequitymethod),
+                investmentaccountedforusingequitymethod_per = COALESCE(VALUES(investmentaccountedforusingequitymethod_per), investmentaccountedforusingequitymethod_per),
+                propertyplantandequipment = COALESCE(VALUES(propertyplantandequipment), propertyplantandequipment),
+                propertyplantandequipment_per = COALESCE(VALUES(propertyplantandequipment_per), propertyplantandequipment_per),
+                rightofuseasset = COALESCE(VALUES(rightofuseasset), rightofuseasset),
+                rightofuseasset_per = COALESCE(VALUES(rightofuseasset_per), rightofuseasset_per),
+                intangibleassets = COALESCE(VALUES(intangibleassets), intangibleassets),
+                intangibleassets_per = COALESCE(VALUES(intangibleassets_per), intangibleassets_per),
+                deferredtaxassets = COALESCE(VALUES(deferredtaxassets), deferredtaxassets),
+                deferredtaxassets_per = COALESCE(VALUES(deferredtaxassets_per), deferredtaxassets_per),
+                othernoncurrentassets = COALESCE(VALUES(othernoncurrentassets), othernoncurrentassets),
+                othernoncurrentassets_per = COALESCE(VALUES(othernoncurrentassets_per), othernoncurrentassets_per),
+                noncurrentassets = COALESCE(VALUES(noncurrentassets), noncurrentassets),
+                noncurrentassets_per = COALESCE(VALUES(noncurrentassets_per), noncurrentassets_per),
+                totalassets = COALESCE(VALUES(totalassets), totalassets),
+                totalassets_per = COALESCE(VALUES(totalassets_per), totalassets_per),
+                shorttermborrowings = COALESCE(VALUES(shorttermborrowings), shorttermborrowings),
+                shorttermborrowings_per = COALESCE(VALUES(shorttermborrowings_per), shorttermborrowings_per),
+                accountspayable = COALESCE(VALUES(accountspayable), accountspayable),
+                accountspayable_per = COALESCE(VALUES(accountspayable_per), accountspayable_per),
+                otherpayables = COALESCE(VALUES(otherpayables), otherpayables),
+                otherpayables_per = COALESCE(VALUES(otherpayables_per), otherpayables_per),
+                currenttaxliabilities = COALESCE(VALUES(currenttaxliabilities), currenttaxliabilities),
+                currenttaxliabilities_per = COALESCE(VALUES(currenttaxliabilities_per), currenttaxliabilities_per);
+            """
+            key_tuple = (symbol, date)
+            value_ls = []
+            for column in columns_list:
+                for key, value in figures.items():
+                    if key == column:
+                        value_ls.append(value)
+            value_tuple = tuple(value_ls)
+            print(value_tuple)
+            # output_tuple = key_tuple + value_tuple # create larger tuple list
+            # execute_query(connection, insert_sql, output_tuple)
+
+            count += 1
+
 if __name__ == "__main__":
     connection = create_connection(host, user, password, database) #Establish SQL connection
     # execute_query(connection, create_newstable)
     # execute_query(connection, create_stocktable)
+    # execute_query(connection, create_balancesheettable)
 
-    update_news(connection)
+    # update_news(connection)
     # update_stocks(connection)
+    update_balancesheet(connection)
 
     # print(execute_read_query(connection, "newsarticles", "SELECT keywords FROM newsarticles;"))
-    # print(execute_read_query(connection, "stocks", "SELECT * FROM stocks WHERE symbol = '2330';"))
+    # print(execute_read_query(connection, "stocks", "SELECT shortname, businesssummary, longbusinesssummary FROM stocks;"))
