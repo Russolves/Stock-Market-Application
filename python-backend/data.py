@@ -122,10 +122,52 @@ CREATE TABLE IF NOT EXISTS balancesheets(
     otherpayables_per FLOAT,
     currenttaxliabilities FLOAT,
     currenttaxliabilities_per FLOAT,
-    PRIMARY KEY (symbol)
-);
+    PRIMARY KEY (symbol, date)
+    );
 """
-
+create_cashflowtable = f"""
+CREATE TABLE IF NOT EXISTS cashflow (
+    symbol VARCHAR(10) NOT NULL,
+    date DATE NOT NULL,
+    cashbalancesincrease FLOAT,
+    cashflowsfromoperatingactivities FLOAT,
+    cashflowsprovidedfromfinancingactivities FLOAT,
+    cashbalancesbeginningofperiod FLOAT,
+    cashbalancesendofperiod FLOAT,
+    netincomebeforetax FLOAT,
+    depreciation FLOAT,
+    amortizationexpense FLOAT,
+    interestexpense FLOAT,
+    interestincome FLOAT,
+    receivableincrease FLOAT,
+    inventoryincrease FLOAT,
+    accountspayable FLOAT,
+    otherinvestingactivities FLOAT,
+    othernoncurrentliabilitiesincrease FLOAT,
+    PRIMARY KEY (symbol, date)
+    );
+"""
+create_financialstatements = f"""
+CREATE TABLE IF NOT EXISTS financialstatements (
+    symbol VARCHAR(10) NOT NULL,
+    date DATE NOT NULL,
+    revenue FLOAT,
+    costsofgoodssold FLOAT,
+    grossprofit FLOAT,
+    operatingexpenses FLOAT,
+    operatingincome FLOAT,
+    totalnonoperatingincomeandexpense FLOAT,
+    pretaxincome FLOAT,
+    incomefromcontinuingoperations FLOAT,
+    incomeaftertaxes FLOAT,
+    totalconsolidatedprofitfortheperiod FLOAT,
+    eps FLOAT,
+    equityattributabletoownersofparent FLOAT,
+    noncontrollinginterests FLOAT,
+    othercomprehensiveincome FLOAT,
+    PRIMARY KEY (symbol, date)
+    );
+"""
 # Method for connecting to mySQL database
 def create_connection(host_name, user_name, user_password, db_name):
     connection = None
@@ -291,8 +333,13 @@ def update_news(connection):
     
 # Method to retrieve basic information for API
 def retrieve_stocks(url, p = None):
-    response = requests.get(url, params = p)
-    data = response.json()
+    try:
+        response = requests.get(url, params = p)
+        data = response.json()
+    except json.JSONDecodeError:
+        print("Response not in JSON format")
+        print(f"{response}")
+        data = {'status':502, 'msg':'Bad gateway: server seems to be experiencing issues (received invalid response from upstream server)'}
     return data
 
 # Method to run in order to update company basic information (within 'stocks' SQL table)
@@ -443,19 +490,31 @@ def update_stocks(connection):
         count += 1
 
 # Method to retrieve balancesheet
-def update_balancesheet(connection):
+def update_financials(connection, dataset, columns_list, insert_sql):
+    reference_dict = {'TaiwanStockBalanceSheet':'balancesheets', 'TaiwanStockCashFlowsStatement':'cashflow', 'TaiwanStockFinancialStatements':'financialstatements'}
+    duplicate = execute_read_query(connection, reference_dict[dataset], f"SELECT symbol, date FROM {reference_dict[dataset]}")
+    duplicate_dict = {} # For storing key-value pair duplicates (e.g. '1101':['2023-09-31', '2024-04-30', ....], ...)
+    duplicate_symbol = list(set([entry['symbol'] for entry in duplicate])) # all unique entries of stock symbols
+    for symbol in duplicate_symbol:
+        date_ls = [] # storing dates
+        for row in duplicate:
+            if row['symbol'] == symbol:
+                date_ls.append(str(row['date']))
+        duplicate_dict[symbol] = date_ls
+
+    print(f"Running dataset {dataset}")
     stock_ls = [entry['symbol'] for entry in execute_read_query(connection, "stocks", "SELECT symbol FROM stocks;")]
     count = 1
     max_retries = 5 # set maximum retries
-    retry_delay = 0.5 # in minutes
+    retry_delay = 13 # in minutes
     for stock in stock_ls:
         status = 402
         retries = 0
-        while status == 402 and retries < max_retries: # if msg request failed and retries < max_retries
-            print(f"Retrieving {count} of {len(stock_ls)}, symbol: {stock}")
+        while (status == 402 or status == 502) and retries < max_retries: # if msg request failed and retries < max_retries
+            print(f"Retrieving {count} of {len(stock_ls)}, symbol: {stock} ({reference_dict[dataset]} table)")
             url = "https://api.finmindtrade.com/api/v4/data"
             param = {
-                'dataset':"TaiwanStockBalanceSheet",
+                'dataset':dataset,
                 'data_id':stock,
                 'start_date':'1990-01-01',
                 'token':finmind_key
@@ -471,145 +530,242 @@ def update_balancesheet(connection):
         else:
             raise Exception("Retrieval of balance sheet data failed even after max retries have been reached")
 
-        # Columns list
-        columns_list = [
-            'CashAndCashEquivalents',
-            'CashAndCashEquivalents_per',
-            'CurrentFinancialAssetsAtFairvalueThroughProfitOrLoss',
-            'CurrentFinancialAssetsAtFairvalueThroughProfitOrLoss_per',
-            'CurrentFinancialAssetsAtFairvalueThroughOtherIncome',
-            'CurrentFinancialAssetsAtFairvalueThroughOtherIncome_per',
-            'FinancialAssetsAtAmortizedCostNonCurrent',
-            'FinancialAssetsAtAmortizedCostNonCurrent_per',
-            'OtherReceivable',
-            'OtherReceivable_per',
-            'AccountsReceivableNet',
-            'AccountsReceivableNet_per',
-            'Inventories',
-            'Inventories_per',
-            'OtherCurrentAssets',
-            'OtherCurrentAssets_per',
-            'InvestmentAccountedForUsingEquityMethod',
-            'InvestmentAccountedForUsingEquityMethod_per',
-            'PropertyPlantAndEquipment',
-            'PropertyPlantAndEquipment_per',
-            'RightOfUseAsset',
-            'RightOfUseAsset_per',
-            'IntangibleAssets',
-            'IntangibleAssets_per',
-            'DeferredTaxAssets',
-            'DeferredTaxAssets_per',
-            'OtherNoncurrentAssets',
-            'OtherNoncurrentAssets_per',
-            'NoncurrentAssets',
-            'NoncurrentAssets_per',
-            'TotalAssets',
-            'TotalAssets_per',
-            'ShorttermBorrowings',
-            'ShorttermBorrowings_per',
-            'AccountsPayable',
-            'AccountsPayable_per',
-            'OtherPayables',
-            'OtherPayables_per',
-            'CurrentTaxLiabilities',
-            'CurrentTaxLiabilities_per'
-        ]
         figures = {type.lower():None for type in columns_list} # initialize empty dictionary
         # Writing the values into variables
         balance_sheet = balance_data['data']
+        date_dict = {} # initialize empty dictionary (date:{figures}, date:{figures...})
         for entry in balance_sheet:
+            date = entry['date']
             for key, value in entry.items():
-                if key == 'date':
-                    date = value
-                elif key == 'stock_id':
-                    symbol = value
-                elif key == 'type':
+                if key == 'type':
                     if value in columns_list:
                         type = value.lower()
                         figures[type] = float(entry['value'])
-            insert_sql = f"""
-                INSERT INTO balancesheets (
-                    symbol, date, cashandcashequivalents, cashandcashequivalents_per,
-                    currentfinancialassetsatfairvaluethroughprofitorloss, currentfinancialassetsatfairvaluethroughprofitorloss_per,
-                    currentfinancialassetsatfairvaluethroughotherincome, currentfinancialassetsatfairvaluethroughotherincome_per,
-                    financialassetsatamortizedcostnoncurrent, financialassetsatamortizedcostnoncurrent_per,
-                    otherreceivable, otherreceivable_per, accountsreceivablenet, accountsreceivablenet_per,
-                    inventories, inventories_per, othercurrentassets, othercurrentassets_per,
-                    investmentaccountedforusingequitymethod, investmentaccountedforusingequitymethod_per,
-                    propertyplantandequipment, propertyplantandequipment_per, rightofuseasset, rightofuseasset_per,
-                    intangibleassets, intangibleassets_per, deferredtaxassets, deferredtaxassets_per,
-                    othernoncurrentassets, othernoncurrentassets_per, noncurrentassets, noncurrentassets_per,
-                    totalassets, totalassets_per, shorttermborrowings, shorttermborrowings_per,
-                    accountspayable, accountspayable_per, otherpayables, otherpayables_per,
-                    currenttaxliabilities, currenttaxliabilities_per
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s
-                ) ON DUPLICATE KEY UPDATE
-                cashandcashequivalents = COALESCE(VALUES(cashandcashequivalents), cashandcashequivalents),
-                cashandcashequivalents_per = COALESCE(VALUES(cashandcashequivalents_per), cashandcashequivalents_per),
-                currentfinancialassetsatfairvaluethroughprofitorloss = COALESCE(VALUES(currentfinancialassetsatfairvaluethroughprofitorloss), currentfinancialassetsatfairvaluethroughprofitorloss),
-                currentfinancialassetsatfairvaluethroughprofitorloss_per = COALESCE(VALUES(currentfinancialassetsatfairvaluethroughprofitorloss_per), currentfinancialassetsatfairvaluethroughprofitorloss_per),
-                currentfinancialassetsatfairvaluethroughotherincome = COALESCE(VALUES(currentfinancialassetsatfairvaluethroughotherincome), currentfinancialassetsatfairvaluethroughotherincome),
-                currentfinancialassetsatfairvaluethroughotherincome_per = COALESCE(VALUES(currentfinancialassetsatfairvaluethroughotherincome_per), currentfinancialassetsatfairvaluethroughotherincome_per),
-                financialassetsatamortizedcostnoncurrent = COALESCE(VALUES(financialassetsatamortizedcostnoncurrent), financialassetsatamortizedcostnoncurrent),
-                financialassetsatamortizedcostnoncurrent_per = COALESCE(VALUES(financialassetsatamortizedcostnoncurrent_per), financialassetsatamortizedcostnoncurrent_per),
-                otherreceivable = COALESCE(VALUES(otherreceivable), otherreceivable),
-                otherreceivable_per = COALESCE(VALUES(otherreceivable_per), otherreceivable_per),
-                accountsreceivablenet = COALESCE(VALUES(accountsreceivablenet), accountsreceivablenet),
-                accountsreceivablenet_per = COALESCE(VALUES(accountsreceivablenet_per), accountsreceivablenet_per),
-                inventories = COALESCE(VALUES(inventories), inventories),
-                inventories_per = COALESCE(VALUES(inventories_per), inventories_per),
-                othercurrentassets = COALESCE(VALUES(othercurrentassets), othercurrentassets),
-                othercurrentassets_per = COALESCE(VALUES(othercurrentassets_per), othercurrentassets_per),
-                investmentaccountedforusingequitymethod = COALESCE(VALUES(investmentaccountedforusingequitymethod), investmentaccountedforusingequitymethod),
-                investmentaccountedforusingequitymethod_per = COALESCE(VALUES(investmentaccountedforusingequitymethod_per), investmentaccountedforusingequitymethod_per),
-                propertyplantandequipment = COALESCE(VALUES(propertyplantandequipment), propertyplantandequipment),
-                propertyplantandequipment_per = COALESCE(VALUES(propertyplantandequipment_per), propertyplantandequipment_per),
-                rightofuseasset = COALESCE(VALUES(rightofuseasset), rightofuseasset),
-                rightofuseasset_per = COALESCE(VALUES(rightofuseasset_per), rightofuseasset_per),
-                intangibleassets = COALESCE(VALUES(intangibleassets), intangibleassets),
-                intangibleassets_per = COALESCE(VALUES(intangibleassets_per), intangibleassets_per),
-                deferredtaxassets = COALESCE(VALUES(deferredtaxassets), deferredtaxassets),
-                deferredtaxassets_per = COALESCE(VALUES(deferredtaxassets_per), deferredtaxassets_per),
-                othernoncurrentassets = COALESCE(VALUES(othernoncurrentassets), othernoncurrentassets),
-                othernoncurrentassets_per = COALESCE(VALUES(othernoncurrentassets_per), othernoncurrentassets_per),
-                noncurrentassets = COALESCE(VALUES(noncurrentassets), noncurrentassets),
-                noncurrentassets_per = COALESCE(VALUES(noncurrentassets_per), noncurrentassets_per),
-                totalassets = COALESCE(VALUES(totalassets), totalassets),
-                totalassets_per = COALESCE(VALUES(totalassets_per), totalassets_per),
-                shorttermborrowings = COALESCE(VALUES(shorttermborrowings), shorttermborrowings),
-                shorttermborrowings_per = COALESCE(VALUES(shorttermborrowings_per), shorttermborrowings_per),
-                accountspayable = COALESCE(VALUES(accountspayable), accountspayable),
-                accountspayable_per = COALESCE(VALUES(accountspayable_per), accountspayable_per),
-                otherpayables = COALESCE(VALUES(otherpayables), otherpayables),
-                otherpayables_per = COALESCE(VALUES(otherpayables_per), otherpayables_per),
-                currenttaxliabilities = COALESCE(VALUES(currenttaxliabilities), currenttaxliabilities),
-                currenttaxliabilities_per = COALESCE(VALUES(currenttaxliabilities_per), currenttaxliabilities_per);
-            """
-            key_tuple = (symbol, date)
+            date_dict[date] = figures # set key-value pair for dictionary
+        # Remove duplicate entries
+        for key in list(date_dict.keys()):
+            if duplicate_dict.get(stock) != None:
+                if key in duplicate_dict[stock]:
+                    date_dict.pop(key)
+        # Arrange the tuples in order (date_dict is emtpy if all are duplicates)
+        for date in list(date_dict.keys()):
+            key_tuple = (stock, date) # stock = symbol & key = date
             value_ls = []
             for column in columns_list:
-                for key, value in figures.items():
-                    if key == column:
+                for key, value in date_dict[date].items():
+                    if key == column.lower():
                         value_ls.append(value)
             value_tuple = tuple(value_ls)
-            print(value_tuple)
-            # output_tuple = key_tuple + value_tuple # create larger tuple list
-            # execute_query(connection, insert_sql, output_tuple)
+            output_tuple = key_tuple + value_tuple # create larger tuple list
+            execute_query(connection, insert_sql, output_tuple)
+        # Next stock
+        count += 1
 
-            count += 1
+# For financials
+# Columns list
+columns_list_balancesheet = [
+    'CashAndCashEquivalents',
+    'CashAndCashEquivalents_per',
+    'CurrentFinancialAssetsAtFairvalueThroughProfitOrLoss',
+    'CurrentFinancialAssetsAtFairvalueThroughProfitOrLoss_per',
+    'CurrentFinancialAssetsAtFairvalueThroughOtherIncome',
+    'CurrentFinancialAssetsAtFairvalueThroughOtherIncome_per',
+    'FinancialAssetsAtAmortizedCostNonCurrent',
+    'FinancialAssetsAtAmortizedCostNonCurrent_per',
+    'OtherReceivable',
+    'OtherReceivable_per',
+    'AccountsReceivableNet',
+    'AccountsReceivableNet_per',
+    'Inventories',
+    'Inventories_per',
+    'OtherCurrentAssets',
+    'OtherCurrentAssets_per',
+    'InvestmentAccountedForUsingEquityMethod',
+    'InvestmentAccountedForUsingEquityMethod_per',
+    'PropertyPlantAndEquipment',
+    'PropertyPlantAndEquipment_per',
+    'RightOfUseAsset',
+    'RightOfUseAsset_per',
+    'IntangibleAssets',
+    'IntangibleAssets_per',
+    'DeferredTaxAssets',
+    'DeferredTaxAssets_per',
+    'OtherNoncurrentAssets',
+    'OtherNoncurrentAssets_per',
+    'NoncurrentAssets',
+    'NoncurrentAssets_per',
+    'TotalAssets',
+    'TotalAssets_per',
+    'ShorttermBorrowings',
+    'ShorttermBorrowings_per',
+    'AccountsPayable',
+    'AccountsPayable_per',
+    'OtherPayables',
+    'OtherPayables_per',
+    'CurrentTaxLiabilities',
+    'CurrentTaxLiabilities_per'
+]
+
+columns_list_cashflow = [
+    'CashBalancesIncrease',
+    'CashFlowsFromOperatingActivities',
+    'CashFlowsProvidedFromFinancingActivities',
+    'CashBalancesBeginningOfPeriod',
+    'CashBalancesEndOfPeriod',
+    'NetIncomeBeforeTax',
+    'Depreciation',
+    'AmortizationExpense',
+    'InterestExpense',
+    'InterestIncome',
+    'ReceivableIncrease',
+    'InventoryIncrease',
+    'AccountsPayable',
+    'OtherInvestingActivities',
+    'OtherNonCurrentLiabilitiesIncrease'
+]
+
+columns_list_financialstatement = [
+    'Revenue',
+    'CostsOfGoodsSold',
+    'GrossProfit',
+    'OperatingExpenses',
+    'OperatingIncome',
+    'TotalNonoperatingIncomeAndExpense',
+    'PreTaxIncome',
+    'IncomeFromContinuingOperations',
+    'IncomeAfterTaxes',
+    'TotalConsolidatedProfitForThePeriod',
+    'EPS',
+    'EquityAttributableToOwnersOfParent',
+    'NoncontrollingInterests',
+    'OtherComprehensiveIncome'
+]
+
+# insert_sql
+insert_sql_balancesheet = f"""
+INSERT INTO balancesheets (
+    symbol, date, cashandcashequivalents, cashandcashequivalents_per,
+    currentfinancialassetsatfairvaluethroughprofitorloss, currentfinancialassetsatfairvaluethroughprofitorloss_per,
+    currentfinancialassetsatfairvaluethroughotherincome, currentfinancialassetsatfairvaluethroughotherincome_per,
+    financialassetsatamortizedcostnoncurrent, financialassetsatamortizedcostnoncurrent_per,
+    otherreceivable, otherreceivable_per, accountsreceivablenet, accountsreceivablenet_per,
+    inventories, inventories_per, othercurrentassets, othercurrentassets_per,
+    investmentaccountedforusingequitymethod, investmentaccountedforusingequitymethod_per,
+    propertyplantandequipment, propertyplantandequipment_per, rightofuseasset, rightofuseasset_per,
+    intangibleassets, intangibleassets_per, deferredtaxassets, deferredtaxassets_per,
+    othernoncurrentassets, othernoncurrentassets_per, noncurrentassets, noncurrentassets_per,
+    totalassets, totalassets_per, shorttermborrowings, shorttermborrowings_per,
+    accountspayable, accountspayable_per, otherpayables, otherpayables_per,
+    currenttaxliabilities, currenttaxliabilities_per
+) VALUES (
+    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+    %s
+) ON DUPLICATE KEY UPDATE
+    cashandcashequivalents = COALESCE(VALUES(cashandcashequivalents), cashandcashequivalents),
+    cashandcashequivalents_per = COALESCE(VALUES(cashandcashequivalents_per), cashandcashequivalents_per),
+    currentfinancialassetsatfairvaluethroughprofitorloss = COALESCE(VALUES(currentfinancialassetsatfairvaluethroughprofitorloss), currentfinancialassetsatfairvaluethroughprofitorloss),
+    currentfinancialassetsatfairvaluethroughprofitorloss_per = COALESCE(VALUES(currentfinancialassetsatfairvaluethroughprofitorloss_per), currentfinancialassetsatfairvaluethroughprofitorloss_per),
+    currentfinancialassetsatfairvaluethroughotherincome = COALESCE(VALUES(currentfinancialassetsatfairvaluethroughotherincome), currentfinancialassetsatfairvaluethroughotherincome),
+    currentfinancialassetsatfairvaluethroughotherincome_per = COALESCE(VALUES(currentfinancialassetsatfairvaluethroughotherincome_per), currentfinancialassetsatfairvaluethroughotherincome_per),
+    financialassetsatamortizedcostnoncurrent = COALESCE(VALUES(financialassetsatamortizedcostnoncurrent), financialassetsatamortizedcostnoncurrent),
+    financialassetsatamortizedcostnoncurrent_per = COALESCE(VALUES(financialassetsatamortizedcostnoncurrent_per), financialassetsatamortizedcostnoncurrent_per),
+    otherreceivable = COALESCE(VALUES(otherreceivable), otherreceivable),
+    otherreceivable_per = COALESCE(VALUES(otherreceivable_per), otherreceivable_per),
+    accountsreceivablenet = COALESCE(VALUES(accountsreceivablenet), accountsreceivablenet),
+    accountsreceivablenet_per = COALESCE(VALUES(accountsreceivablenet_per), accountsreceivablenet_per),
+    inventories = COALESCE(VALUES(inventories), inventories),
+    inventories_per = COALESCE(VALUES(inventories_per), inventories_per),
+    othercurrentassets = COALESCE(VALUES(othercurrentassets), othercurrentassets),
+    othercurrentassets_per = COALESCE(VALUES(othercurrentassets_per), othercurrentassets_per),
+    investmentaccountedforusingequitymethod = COALESCE(VALUES(investmentaccountedforusingequitymethod), investmentaccountedforusingequitymethod),
+    investmentaccountedforusingequitymethod_per = COALESCE(VALUES(investmentaccountedforusingequitymethod_per), investmentaccountedforusingequitymethod_per),
+    propertyplantandequipment = COALESCE(VALUES(propertyplantandequipment), propertyplantandequipment),
+    propertyplantandequipment_per = COALESCE(VALUES(propertyplantandequipment_per), propertyplantandequipment_per),
+    rightofuseasset = COALESCE(VALUES(rightofuseasset), rightofuseasset),
+    rightofuseasset_per = COALESCE(VALUES(rightofuseasset_per), rightofuseasset_per),
+    intangibleassets = COALESCE(VALUES(intangibleassets), intangibleassets),
+    intangibleassets_per = COALESCE(VALUES(intangibleassets_per), intangibleassets_per),
+    deferredtaxassets = COALESCE(VALUES(deferredtaxassets), deferredtaxassets),
+    deferredtaxassets_per = COALESCE(VALUES(deferredtaxassets_per), deferredtaxassets_per),
+    othernoncurrentassets = COALESCE(VALUES(othernoncurrentassets), othernoncurrentassets),
+    othernoncurrentassets_per = COALESCE(VALUES(othernoncurrentassets_per), othernoncurrentassets_per),
+    noncurrentassets = COALESCE(VALUES(noncurrentassets), noncurrentassets),
+    noncurrentassets_per = COALESCE(VALUES(noncurrentassets_per), noncurrentassets_per),
+    totalassets = COALESCE(VALUES(totalassets), totalassets),
+    totalassets_per = COALESCE(VALUES(totalassets_per), totalassets_per),
+    shorttermborrowings = COALESCE(VALUES(shorttermborrowings), shorttermborrowings),
+    shorttermborrowings_per = COALESCE(VALUES(shorttermborrowings_per), shorttermborrowings_per),
+    accountspayable = COALESCE(VALUES(accountspayable), accountspayable),
+    accountspayable_per = COALESCE(VALUES(accountspayable_per), accountspayable_per),
+    otherpayables = COALESCE(VALUES(otherpayables), otherpayables),
+    otherpayables_per = COALESCE(VALUES(otherpayables_per), otherpayables_per),
+    currenttaxliabilities = COALESCE(VALUES(currenttaxliabilities), currenttaxliabilities),
+    currenttaxliabilities_per = COALESCE(VALUES(currenttaxliabilities_per), currenttaxliabilities_per);
+"""
+insert_sql_cashflow = f"""
+INSERT INTO cashflow (
+    symbol, date, cashbalancesincrease, cashflowsfromoperatingactivities, cashflowsprovidedfromfinancingactivities, 
+    cashbalancesbeginningofperiod, cashbalancesendofperiod, netincomebeforetax, depreciation,
+    amortizationexpense, interestexpense, interestincome, receivableincrease,
+    inventoryincrease, accountspayable, otherinvestingactivities, othernoncurrentliabilitiesincrease 
+) VALUES (
+    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+) ON DUPLICATE KEY UPDATE
+    cashbalancesincrease = COALESCE(VALUES(cashbalancesincrease), cashbalancesincrease),
+    cashflowsfromoperatingactivities = COALESCE(VALUES(cashflowsfromoperatingactivities), cashflowsfromoperatingactivities),
+    cashflowsprovidedfromfinancingactivities = COALESCE(VALUES(cashflowsprovidedfromfinancingactivities), cashflowsprovidedfromfinancingactivities),
+    cashbalancesbeginningofperiod = COALESCE(VALUES(cashbalancesbeginningofperiod), cashbalancesbeginningofperiod),
+    cashbalancesendofperiod = COALESCE(VALUES(cashbalancesendofperiod), cashbalancesendofperiod),
+    netincomebeforetax = COALESCE(VALUES(netincomebeforetax), netincomebeforetax),
+    depreciation = COALESCE(VALUES(depreciation), depreciation),
+    amortizationexpense = COALESCE(VALUES(amortizationexpense), amortizationexpense),
+    interestexpense = COALESCE(VALUES(interestexpense), interestexpense),
+    interestincome = COALESCE(VALUES(interestincome), interestincome),
+    receivableincrease = COALESCE(VALUES(receivableincrease), receivableincrease),
+    inventoryincrease = COALESCE(VALUES(inventoryincrease), inventoryincrease),
+    accountspayable = COALESCE(VALUES(accountspayable), accountspayable),
+    otherinvestingactivities = COALESCE(VALUES(otherinvestingactivities), otherinvestingactivities),
+    othernoncurrentliabilitiesincrease = COALESCE(VALUES(othernoncurrentliabilitiesincrease), othernoncurrentliabilitiesincrease);
+"""
+insert_sql_financialstatement = f"""
+INSERT INTO financialstatements (
+    symbol, date, revenue, costsofgoodssold, grossprofit, 
+    operatingexpenses, operatingincome, totalnonoperatingincomeandexpense, pretaxincome,
+    incomefromcontinuingoperations, incomeaftertaxes, totalconsolidatedprofitfortheperiod, eps,
+    equityattributabletoownersofparent, noncontrollinginterests, othercomprehensiveincome 
+) VALUES (
+    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+) ON DUPLICATE KEY UPDATE
+    revenue = COALESCE(VALUES(revenue), revenue),
+    costsofgoodssold = COALESCE(VALUES(costsofgoodssold), costsofgoodssold),
+    grossprofit = COALESCE(VALUES(grossprofit), grossprofit),
+    operatingexpenses = COALESCE(VALUES(operatingexpenses), operatingexpenses),
+    operatingincome = COALESCE(VALUES(operatingincome), operatingincome),
+    totalnonoperatingincomeandexpense = COALESCE(VALUES(totalnonoperatingincomeandexpense), totalnonoperatingincomeandexpense),
+    pretaxincome = COALESCE(VALUES(pretaxincome), pretaxincome),
+    incomefromcontinuingoperations = COALESCE(VALUES(incomefromcontinuingoperations), incomefromcontinuingoperations),
+    incomeaftertaxes = COALESCE(VALUES(incomeaftertaxes), incomeaftertaxes),
+    totalconsolidatedprofitfortheperiod = COALESCE(VALUES(totalconsolidatedprofitfortheperiod), totalconsolidatedprofitfortheperiod),
+    eps = COALESCE(VALUES(eps), eps),
+    equityattributabletoownersofparent = COALESCE(VALUES(equityattributabletoownersofparent), equityattributabletoownersofparent),
+    noncontrollinginterests = COALESCE(VALUES(noncontrollinginterests), noncontrollinginterests),
+    othercomprehensiveincome = COALESCE(VALUES(othercomprehensiveincome), othercomprehensiveincome);
+"""
 
 if __name__ == "__main__":
     connection = create_connection(host, user, password, database) #Establish SQL connection
     # execute_query(connection, create_newstable)
     # execute_query(connection, create_stocktable)
     # execute_query(connection, create_balancesheettable)
+    # execute_query(connection, create_cashflowtable)
+    # execute_query(connection, create_financialstatements)
 
     # update_news(connection)
     # update_stocks(connection)
-    update_balancesheet(connection)
+    update_financials(connection, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)
+    update_financials(connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)
+    update_financials(connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)
 
     # print(execute_read_query(connection, "newsarticles", "SELECT keywords FROM newsarticles;"))
     # print(execute_read_query(connection, "stocks", "SELECT shortname, businesssummary, longbusinesssummary FROM stocks;"))
