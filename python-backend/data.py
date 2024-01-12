@@ -763,8 +763,8 @@ if __name__ == "__main__":
 
     # update_news(connection)
     # update_stocks(connection)
-    update_financials(connection, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)
-    update_financials(connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)
+    # update_financials(connection, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)
+    # update_financials(connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)
     update_financials(connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)
 
     # print(execute_read_query(connection, "newsarticles", "SELECT keywords FROM newsarticles;"))
