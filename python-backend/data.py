@@ -685,7 +685,7 @@ def update_index(connection):
             duplicate_dict[date] = ls
         # Remove duplicate entries
         for duplicate_date in list(duplicate_dict.keys()):
-            if reference_dict.get(entry) != None:
+            if reference_dict.get(entry) != None: # Make sure that key exists first
                 if duplicate_date in reference_dict[entry]:
                     duplicate_dict.pop(duplicate_date)
         for key in list(duplicate_dict.keys()): # key is date
