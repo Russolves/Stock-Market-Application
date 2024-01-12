@@ -10,6 +10,7 @@ import datetime
 from snownlp import SnowNLP # Version: 0.12.3
 import yfinance as yf # Version 0.2.33
 from googletrans import Translator # Version 4.0.0rc1
+import pandas as pd # Version 2.1.4
 
 # Load environmental variables from .env file within python-backend
 load_dotenv()
@@ -181,7 +182,35 @@ CREATE TABLE IF NOT EXISTS stockprices (
     spread FLOAT,
     trading_turnover BIGINT,
     PRIMARY KEY (symbol, date)
-)
+    );
+"""
+create_dividendrates = f"""
+CREATE TABLE IF NOT EXISTS dividendrates (
+    symbol VARCHAR(10) NOT NULL,
+    date DATE NOT NULL,
+    dividendrate FLOAT,
+    dividendyield FLOAT,
+    exdividenddate DATE,
+    fiveyearavgdividendyield FLOAT,
+    trailingannualdividendrate FLOAT,
+    trailingannualdividendyield FLOAT,
+    lastdividendvalue FLOAT,
+    lastdividenddate DATE,
+    PRIMARY KEY (symbol)
+    );
+"""
+create_marketindex = f"""
+CREATE TABLE IF NOT EXISTS marketindex (
+    index_symbol VARCHAR(10) NOT NULL,
+    date DATE NOT NULL,
+    open FLOAT,
+    high FLOAT,
+    low FLOAT,
+    close FLOAT,
+    adj_close FLOAT,
+    volume BIGINT,
+    PRIMARY KEY (index_symbol, date)
+);
 """
 # Method for connecting to mySQL database
 def create_connection(host_name, user_name, user_password, db_name):
@@ -250,6 +279,7 @@ def retrieve_news(page = ''):
 
 # Method to run everyday in order to update news (run once every 10 min)
 def update_news(connection):
+    print("Retrieving latest Taiwanese business news articles")
     # Retrieve all 公司簡稱 names into a list
     stock_names = [entry['shortname'] for entry in execute_read_query(connection, "stocks", "SELECT shortname FROM stocks;")]
     
@@ -362,7 +392,7 @@ def update_stocks(connection):
     twse_data = retrieve_stocks("https://openapi.twse.com.tw/v1/opendata/t187ap03_L")
     count = 1
     for stock in twse_data:
-        print(f"Updating {count} of {len(twse_data)}")
+        print(f"Updating {count} of {len(twse_data)} for latest stock data")
         shortname, longname, english_name, website, address, email, phone, fax, chairman, ceo, spokesperson, acting_spokesperson = None, None, None, None, None, None, None, None, None, None, None, None # Define None types first
         for key in list(stock.keys()):
             if key == '公司代號':
@@ -514,7 +544,7 @@ def update_financials(connection, dataset, columns_list, insert_sql):
         date_ls = [] # storing dates
         for row in duplicate:
             if row['symbol'] == symbol:
-                date_ls.append(str(row['date']))
+                date_ls.append(str(row['date'])) # convert datetime object (SQL) to string (e.g. '1920-01-01')
         duplicate_dict[symbol] = date_ls
 
     print(f"Running dataset {dataset}")
@@ -576,7 +606,108 @@ def update_financials(connection, dataset, columns_list, insert_sql):
         # Next stock
         count += 1
 
-# For financials
+# Method for converting unix timestamps into the format YYYY-MM-DD
+def convert_unix_timestamp(unix_timestamp):
+    if unix_timestamp == None:
+        return None
+    else:
+        timestamp_datetime = datetime.datetime.utcfromtimestamp(unix_timestamp)
+        formatted_date = timestamp_datetime.strftime('%Y-%m-%d')
+        return formatted_date
+# Method for retrieving dividends for each stock
+def update_dividends(connection):
+    print(f"Updating dividend rates (daily update)")
+    stocks_data = execute_read_query(connection, 'stocks', 'SELECT symbol FROM stocks;')
+    symbol_ls = [stock['symbol'] for stock in stocks_data]
+    date = datetime.datetime.now().strftime('%Y-%m-%d') # get current date
+    count = 1
+    for symbol in symbol_ls:
+        print(f"Updating dividend rates {count} out of {len(symbol_ls)} for {symbol}")
+        symbol_TW = symbol + '.TW'
+        stock = yf.Ticker(symbol_TW).info # stock is a dictionary (keys: address1, address2)
+        dividendrate = stock['dividendRate'] if stock.get('dividendRate') else None
+        dividendyield = stock['dividendYield'] if stock.get('dividendYield') else None
+        exdividenddate = convert_unix_timestamp(stock['exDividendDate'] if stock.get('exDividendDate') else None)
+        fiveyearavgdividendyield = stock['fiveYearAvgDividendYield'] if stock.get('fiveYearAvgDividendYield') else None
+        trailingannualdividendrate = stock['trailingAnnualDividendRate'] if stock.get('trailingAnnualDividendRate') else None
+        trailingannualdividendyield = stock['trailingAnnualDividendYield'] if stock.get('trailingAnnualDividendYield') else None
+        lastdividendvalue = stock['lastDividendValue'] if stock.get('lastDividendValue') else None
+        lastdividenddate = convert_unix_timestamp(stock['lastDividendDate'] if stock.get('lastDividendDate') else None)
+        output_tuple = (symbol, date, dividendrate, dividendyield, exdividenddate, fiveyearavgdividendyield, trailingannualdividendrate, trailingannualdividendyield, lastdividendvalue, lastdividenddate)
+        insert_sql = f"""
+        INSERT INTO dividendrates (
+            symbol, date, dividendrate, dividendyield, exdividenddate, fiveyearavgdividendyield,
+            trailingannualdividendrate, trailingannualdividendyield, lastdividendvalue, lastdividenddate
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        ) ON DUPLICATE KEY UPDATE
+            date = VALUES(date),
+            dividendrate = VALUES(dividendrate),
+            dividendyield = VALUES(dividendyield),
+            exdividenddate = VALUES(exdividenddate),
+            fiveyearavgdividendyield = VALUES(fiveyearavgdividendyield),
+            trailingannualdividendrate = VALUES(trailingannualdividendrate),
+            trailingannualdividendyield = VALUES(trailingannualdividendyield),
+            lastdividendvalue = VALUES(lastdividendvalue),
+            lastdividenddate = VALUES(lastdividenddate);
+        """
+        execute_query(connection, insert_sql, output_tuple)
+        count += 1
+
+# Method for updating market index data
+def update_index(connection):
+    print("Updating market indexes...")
+    index_data = [entry for entry in execute_read_query(connection, 'marketindex', 'SELECT index_symbol, date FROM marketindex;')] # list of dictionaries
+    index_ls = list(set([entry['index_symbol'] for entry in index_data]))
+    reference_dict = {} # initialize dictionary ('^DJI':['2024-01-02', '2024-01-03'...], '^GSPC':)
+    for index in index_ls:
+        date_ls = []
+        for row in index_data:
+            if row['index_symbol'] == index:
+                date_ls.append(str(row['date']))
+        reference_dict[index] = date_ls
+    market_indexes = ['^DJI', '^GSPC', '^N225', '^HSI', '^TWII', '^IXIC']
+    count = 1
+    for entry in market_indexes:
+        print(f"Updating market index: {entry} Count {count} of {len(market_indexes)}")
+        market_index = yf.download(entry) # pandas dataframe
+        date_index = [date.strftime('%Y-%m-%d') for date in list(market_index.index)] # list of all dates within dataframe      
+        duplicate_dict = {} # initialize dictionary ('2024-01-01':[list of values], '2024-01-02':[list of values] (in order), ...)
+        for date in date_index:
+            data = market_index.loc[date]
+            open = float(data['Open']) if not pd.isna(data['Open']) else None
+            high = float(data['High']) if not pd.isna(data['High']) else None
+            low = float(data['Low']) if not pd.isna(data['Low']) else None
+            close = float(data['Close']) if not pd.isna(data['Close']) else None
+            adj_close = float(data['Adj Close']) if not pd.isna(data['Adj Close']) else None
+            volume = int(data['Volume']) if not pd.isna(data['Volume']) else None
+            ls = [open, high, low, close, adj_close, volume] # put everything into list (in order)
+            duplicate_dict[date] = ls
+        # Remove duplicate entries
+        for duplicate_date in list(duplicate_dict.keys()):
+            if reference_dict.get(entry) != None:
+                if duplicate_date in reference_dict[entry]:
+                    duplicate_dict.pop(duplicate_date)
+        for key in list(duplicate_dict.keys()): # key is date
+            key_tuple = (entry, key) # (index_symbol, date)
+            output_tuple = key_tuple + tuple(duplicate_dict[key])
+            insert_sql = f"""
+            INSERT INTO marketindex (
+                index_symbol, date, open, high, low, close, adj_close, volume
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s
+            ) ON DUPLICATE KEY UPDATE
+                open = COALESCE(VALUES(open), open),
+                high = COALESCE(VALUES(high), high),
+                low = COALESCE(VALUES(low), low),
+                close = COALESCE(VALUES(close), close),
+                adj_close = COALESCE(VALUES(adj_close), adj_close),
+                volume = COALESCE(VALUES(volume), volume);
+            """
+            execute_query(connection, insert_sql, output_tuple)
+        count += 1
+
+# For financials (balancesheet, cashflow and financialstatement)
 # Columns list
 columns_list_balancesheet = [
     'CashAndCashEquivalents',
@@ -799,13 +930,18 @@ if __name__ == "__main__":
     # execute_query(connection, create_balancesheettable)
     # execute_query(connection, create_cashflowtable)
     # execute_query(connection, create_financialstatements)
-    execute_query(connection, create_stockprices)
+    # execute_query(connection, create_stockprices)
+    # execute_query(connection, create_dividendrates)
+    # execute_query(connection, create_marketindex)
 
+    # Section to update all databases
     update_news(connection)
-    update_stocks(connection)
+    # update_stocks(connection)
     # update_financials(connection, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)
     # update_financials(connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)
     # update_financials(connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)
+    # update_dividends(connection)
+    update_index(connection)
     update_financials(connection, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice)
 
     # print(execute_read_query(connection, "newsarticles", "SELECT keywords FROM newsarticles;"))
