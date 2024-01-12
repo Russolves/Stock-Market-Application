@@ -168,6 +168,21 @@ CREATE TABLE IF NOT EXISTS financialstatements (
     PRIMARY KEY (symbol, date)
     );
 """
+create_stockprices = f"""
+CREATE TABLE IF NOT EXISTS stockprices (
+    symbol VARCHAR(10) NOT NULL,
+    date DATE NOT NULL,
+    trading_volume BIGINT,
+    trading_money BIGINT,
+    open FLOAT,
+    max FLOAT,
+    min FLOAT,
+    close FLOAT,
+    spread FLOAT,
+    trading_turnover BIGINT,
+    PRIMARY KEY (symbol, date)
+)
+"""
 # Method for connecting to mySQL database
 def create_connection(host_name, user_name, user_password, db_name):
     connection = None
@@ -491,7 +506,7 @@ def update_stocks(connection):
 
 # Method to retrieve balancesheet
 def update_financials(connection, dataset, columns_list, insert_sql):
-    reference_dict = {'TaiwanStockBalanceSheet':'balancesheets', 'TaiwanStockCashFlowsStatement':'cashflow', 'TaiwanStockFinancialStatements':'financialstatements'}
+    reference_dict = {'TaiwanStockBalanceSheet':'balancesheets', 'TaiwanStockCashFlowsStatement':'cashflow', 'TaiwanStockFinancialStatements':'financialstatements', 'TaiwanStockPrice':'stockprices'}
     duplicate = execute_read_query(connection, reference_dict[dataset], f"SELECT symbol, date FROM {reference_dict[dataset]}")
     duplicate_dict = {} # For storing key-value pair duplicates (e.g. '1101':['2023-09-31', '2024-04-30', ....], ...)
     duplicate_symbol = list(set([entry['symbol'] for entry in duplicate])) # all unique entries of stock symbols
@@ -641,6 +656,16 @@ columns_list_financialstatement = [
     'OtherComprehensiveIncome'
 ]
 
+columns_list_stockprice = [
+    'Trading_Volume',
+    'Trading_money',
+    'open', 
+    'max',
+    'min',
+    'close',
+    'spread',
+    'Trading_turnover'
+]
 # insert_sql
 insert_sql_balancesheet = f"""
 INSERT INTO balancesheets (
@@ -752,7 +777,21 @@ INSERT INTO financialstatements (
     noncontrollinginterests = COALESCE(VALUES(noncontrollinginterests), noncontrollinginterests),
     othercomprehensiveincome = COALESCE(VALUES(othercomprehensiveincome), othercomprehensiveincome);
 """
-
+insert_sql_stockprice = f"""
+INSERT INTO stockprices (
+    symbol, date, trading_volume, trading_money, open, max, min, close, spread, trading_turnover
+) VALUES (
+    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+) ON DUPLICATE KEY UPDATE
+    trading_volume = COALESCE(VALUES(trading_volume), trading_volume),
+    trading_money = COALESCE(VALUES(trading_money), trading_money),
+    open = COALESCE(VALUES(open), open),
+    max = COALESCE(VALUES(max), max),
+    min = COALESCE(VALUES(min), min),
+    close = COALESCE(VALUES(close), close),
+    spread = COALESCE(VALUES(spread), spread),
+    trading_turnover = COALESCE(VALUES(trading_turnover), trading_turnover);
+"""
 if __name__ == "__main__":
     connection = create_connection(host, user, password, database) #Establish SQL connection
     # execute_query(connection, create_newstable)
@@ -760,12 +799,14 @@ if __name__ == "__main__":
     # execute_query(connection, create_balancesheettable)
     # execute_query(connection, create_cashflowtable)
     # execute_query(connection, create_financialstatements)
+    execute_query(connection, create_stockprices)
 
-    # update_news(connection)
-    # update_stocks(connection)
+    update_news(connection)
+    update_stocks(connection)
     # update_financials(connection, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)
     # update_financials(connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)
-    update_financials(connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)
+    # update_financials(connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)
+    update_financials(connection, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice)
 
     # print(execute_read_query(connection, "newsarticles", "SELECT keywords FROM newsarticles;"))
     # print(execute_read_query(connection, "stocks", "SELECT shortname, businesssummary, longbusinesssummary FROM stocks;"))
