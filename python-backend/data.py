@@ -941,7 +941,7 @@ if __name__ == "__main__":
     # update_financials(connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)
     # update_financials(connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)
     # update_dividends(connection)
-    update_index(connection)
+    # update_index(connection)
     update_financials(connection, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice)
 
     # print(execute_read_query(connection, "newsarticles", "SELECT keywords FROM newsarticles;"))
