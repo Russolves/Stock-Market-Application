@@ -23,16 +23,10 @@ const pool = mysql.createPool({ // access through environment variables
 app.get('/stocks', (req, res) => {
     pool.query("SELECT * FROM stocks WHERE symbol = '2330'", (err, results, fields) => {
         if (err) {
-            res.status(500).send('Something went wrong with stocks API');
+            res.status(500).send('Something went wrong with the API call for the "stocks" table');
         } else {
-            // console.log('These are the results:', results); // remember that results is a list!
-            const shortname = results[0].shortname;
-            const longname = results[0].longname;
-            const payload = [{
-                short: shortname,
-                long: longname
-            }];
-            res.status(200).json(payload);
+            // console.log('These are the results:', results); // results is a list!
+            res.status(200).json(results);
         }
     });
 });
