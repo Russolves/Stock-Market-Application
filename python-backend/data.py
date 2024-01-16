@@ -235,7 +235,7 @@ def execute_query(connection, query, params = None):
         connection.commit()
         print("Query execution successful!")
     except Error as e:
-        print(f"The error {e} occurred")
+        print(f"The error {e} occurred during query execution")
 
 # Method for reading a specific table from within the database
 def execute_read_query(connection, table, query = None):
@@ -248,7 +248,7 @@ def execute_read_query(connection, table, query = None):
         result = cursor.fetchall()
         return result
     except Error as e:
-        print(f"The error '{e}' occurred")
+        print(f"The error '{e}' occurred during reading")
 
 # Method for translating text using googletrans
 def translate_text(text, target_language = 'zh-tw'):
