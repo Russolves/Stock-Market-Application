@@ -1,2 +1,4 @@
 python-backend/stockmarketdatabasekey.json
 python-backend/.env
+js-backend/.env
+js-backend/node_modules

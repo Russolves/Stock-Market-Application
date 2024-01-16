@@ -5,3 +5,4 @@ snownlp==0.12.3
 yfinance==0.2.33
 googletrans==4.0.0rc1
 pandas==2.1.4
+schedule==1.2.1

@@ -2,6 +2,8 @@
 import json
 import os
 import time
+import threading
+import pytz
 import requests # Version: 2.31.0
 from dotenv import load_dotenv # Version: 1.0.0
 import mysql.connector # Version: 8.2.0
@@ -11,6 +13,7 @@ from snownlp import SnowNLP # Version: 0.12.3
 import yfinance as yf # Version 0.2.33
 from googletrans import Translator # Version 4.0.0rc1
 import pandas as pd # Version 2.1.4
+import schedule # Version 1.2.1
 
 # Load environmental variables from .env file within python-backend
 load_dotenv()
@@ -22,6 +25,14 @@ database = os.getenv("DB_NAME")
 finmind_key = os.getenv('FINMIND_KEY')
 
 # String for creating table
+create_currentpricetable = """
+CREATE TABLE IF NOT EXISTS currentprice(
+    symbol VARCHAR(10) NOT NULL,
+    datetime DATETIME NOT NULL,
+    price FLOAT,
+    PRIMARY KEY (symbol, datetime)
+);
+"""
 create_newstable = """
 CREATE TABLE IF NOT EXISTS newsarticles (
     article_id VARCHAR(50) NOT NULL,
@@ -536,6 +547,7 @@ def update_stocks(connection):
 
 # Method to retrieve balancesheet
 def update_financials(connection, dataset, columns_list, insert_sql):
+    print(f"Entering update financials {dataset} for table {reference_dict[dataset]}")
     reference_dict = {'TaiwanStockBalanceSheet':'balancesheets', 'TaiwanStockCashFlowsStatement':'cashflow', 'TaiwanStockFinancialStatements':'financialstatements', 'TaiwanStockPrice':'stockprices'}
     duplicate = execute_read_query(connection, reference_dict[dataset], f"SELECT symbol, date FROM {reference_dict[dataset]}")
     duplicate_dict = {} # For storing key-value pair duplicates (e.g. '1101':['2023-09-31', '2024-04-30', ....], ...)
@@ -705,6 +717,44 @@ def update_index(connection):
                 volume = COALESCE(VALUES(volume), volume);
             """
             execute_query(connection, insert_sql, output_tuple)
+        count += 1
+
+# Method to update currentprice table
+def update_currentprice(connection, interval = 5):
+    print(f"Updating current price (in {interval} minute intervals)")
+    stocks_data = execute_read_query(connection, 'stocks', 'SELECT symbol FROM stocks;')
+    symbol_ls = [stock['symbol'] for stock in stocks_data]
+    count = 1
+    for symbol in symbol_ls:
+        print(f"Updating {symbol}: Count {count} of {len(symbol_ls)}")
+        sql_query = f"SELECT datetime, price FROM currentprice WHERE symbol = '{symbol}"
+        stock_data = execute_read_query(connection, 'currentprice', sql_query) # list of dictionaries
+        if len(stock_data) >= 1674: # this number because 54 entries a day (market open to close) and 31 days per month
+            # delete the earliest entry for the stock
+            sql_delete = f"""
+            DELETE FROM currentprice
+            WHERE symbol = '{symbol}'
+            ORDER BY datetime
+            LIMIT 1;
+            """
+            execute_query(connection, sql_delete)
+        # get current datetime
+        current_datetime = datetime.datetime.now()
+        # Get current market price for stock
+        yf_query = symbol + '.TW'
+        stock = yf.Ticker(yf_query).info
+        price = stock.get('currentPrice')
+        insert_sql = f"""
+        INSERT INTO currentprice (
+            symbol, datetime, price
+        ) VALUES (
+            %s, %s, %s
+        );
+        """
+        # construct output tuple
+        output_tuple = tuple(symbol, current_datetime, price)
+        # insert into table
+        execute_query(connection, insert_sql, output_tuple)
         count += 1
 
 # For financials (balancesheet, cashflow and financialstatement)
@@ -923,8 +973,25 @@ INSERT INTO stockprices (
     spread = COALESCE(VALUES(spread), spread),
     trading_turnover = COALESCE(VALUES(trading_turnover), trading_turnover);
 """
+# Method for running thread
+def run_threaded(job_func, *args):
+    job_thread = threading.Thread(target = job_func, args = args)
+    job_thread.start()
+# Method for removing outdated jobs
+def remove_outdated_jobs(tz):
+    # This function will remove the 'stocks' jobs after 1:30 PM Taipei time
+    now = datetime.datetime.now(tz)
+    if now.hour >= 13 and now.minute >= 30:
+        schedule.clear('currentprice')
+# Method for scheduling the currentprice update
+def schedule_currentprice_update(tz, interval):
+    now = datetime.datetime.now(tz)
+    if 9 <= now.hour < 13 or (now.hour == 13 and now.minute < 30):
+        run_threaded(update_currentprice, connection, interval)
+    
 if __name__ == "__main__":
     connection = create_connection(host, user, password, database) #Establish SQL connection
+    # Code for creating tables
     # execute_query(connection, create_newstable)
     # execute_query(connection, create_stocktable)
     # execute_query(connection, create_balancesheettable)
@@ -933,16 +1000,53 @@ if __name__ == "__main__":
     # execute_query(connection, create_stockprices)
     # execute_query(connection, create_dividendrates)
     # execute_query(connection, create_marketindex)
+    # execute_query(connection, create_currentpricetable)
 
     # Section to update all databases
-    update_news(connection)
+    # update_news(connection)
     # update_stocks(connection)
     # update_financials(connection, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)
     # update_financials(connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)
     # update_financials(connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)
     # update_dividends(connection)
     # update_index(connection)
-    update_financials(connection, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice)
+    # update_financials(connection, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice)
+    # update_currentprice(connection, 5)
 
+    # Update through threading and scheduling
+    currentprice_minutes = 5 # define interval for updating current price
+    tz = pytz.timezone('Asia/Taipei')
+    # schedule update_currentprice to run every {minutes} minutes 
+    schedule.every(currentprice_minutes).minutes.do(schedule_currentprice_update).tag('currentprice')
+    # schedule other updates for other market times
+    pre_market_time = "07:30" # run once during pre market
+    post_market_time = "14:00" # run second time post market
+    # pre market run
+    schedule.every().day.at(pre_market_time).do(run_threaded, update_news, connection)
+    schedule.every().day.at(pre_market_time).do(run_threaded, update_stocks, connection)
+    schedule.every().day.at(pre_market_time).do(run_threaded, update_financials, connection, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)
+    schedule.every().day.at(pre_market_time).do(run_threaded, update_financials, connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)
+    schedule.every().day.at(pre_market_time).do(run_threaded, update_financials, connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)
+    schedule.every().day.at(pre_market_time).do(run_threaded, update_dividends, connection)
+    schedule.every().day.at(pre_market_time).do(run_threaded, update_index, connection)
+    schedule.every().day.at(pre_market_time).do(run_threaded, update_financials, connection, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice)
+    # post market run
+    schedule.every().day.at(post_market_time).do(run_threaded, update_news, connection)
+    schedule.every().day.at(post_market_time).do(run_threaded, update_stocks, connection)
+    schedule.every().day.at(post_market_time).do(run_threaded, update_financials, connection, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)
+    schedule.every().day.at(post_market_time).do(run_threaded, update_financials, connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)
+    schedule.every().day.at(post_market_time).do(run_threaded, update_financials, connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)
+    schedule.every().day.at(post_market_time).do(run_threaded, update_dividends, connection)
+    schedule.every().day.at(post_market_time).do(run_threaded, update_index, connection)
+    schedule.every().day.at(post_market_time).do(run_threaded, update_financials, connection, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice)
+
+    print("Entering scheduler loop...")
+    # Run the scheduler in a loop
+    while True:
+        schedule.run_pending()
+        remove_outdated_jobs(tz)
+        time.sleep(60) # sleep for 60 seconds
+
+    # Queries to SQL database
     # print(execute_read_query(connection, "newsarticles", "SELECT keywords FROM newsarticles;"))
     # print(execute_read_query(connection, "stocks", "SELECT shortname, businesssummary, longbusinesssummary FROM stocks;"))
