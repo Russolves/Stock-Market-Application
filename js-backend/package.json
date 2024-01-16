@@ -1,0 +1,24 @@
+{
+  "name": "stock-market-app",
+  "version": "1.0.0",
+  "description": "The backend to a stock market application that queries a mysql database hosted on Google Cloud to retrieve stock information",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Russolves/Stock-Market-Application.git"
+  },
+  "author": "Russell",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Russolves/Stock-Market-Application/issues"
+  },
+  "homepage": "https://github.com/Russolves/Stock-Market-Application#readme",
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "mysql2": "^3.7.0"
+  }
+}
