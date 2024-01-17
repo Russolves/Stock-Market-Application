@@ -1001,7 +1001,7 @@ if __name__ == "__main__":
     # execute_query(connection, create_stockprices)
     # execute_query(connection, create_dividendrates)
     # execute_query(connection, create_marketindex)
-    execute_query(connection, create_currentpricetable)
+    # execute_query(connection, create_currentpricetable)
 
     # Section to update all databases
     # update_news(connection)
@@ -1015,15 +1015,16 @@ if __name__ == "__main__":
     # update_currentprice(connection, 5)
 
     # Update through threading and scheduling
-    currentprice_minutes = 0.25 # define interval for updating current price
+    currentprice_minutes = 5 # define interval for updating current price
     tz = pytz.timezone('Asia/Taipei')
     # schedule update_currentprice to run every {minutes} minutes 
     schedule.every(currentprice_minutes).minutes.do(schedule_currentprice_update, tz, currentprice_minutes).tag('currentprice')
+    # schedule news updates to run every 2 hours
+    schedule.every(0.25).minutes.do(run_threaded, update_news, connection).tag('news')
     # schedule other updates for other market times
     pre_market_time = "07:30" # run once for pre market
     post_market_time = "14:00" # run second time post market
     # pre market run
-    schedule.every().day.at(pre_market_time).do(run_threaded, update_news, connection)
     schedule.every().day.at(pre_market_time).do(run_threaded, update_stocks, connection)
     schedule.every().day.at(pre_market_time).do(run_threaded, update_financials, connection, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)
     schedule.every().day.at(pre_market_time).do(run_threaded, update_financials, connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)
