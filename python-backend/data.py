@@ -547,8 +547,8 @@ def update_stocks(connection):
 
 # Method to retrieve balancesheet
 def update_financials(connection, dataset, columns_list, insert_sql):
-    print(f"Entering update financials {dataset} for table {reference_dict[dataset]}")
     reference_dict = {'TaiwanStockBalanceSheet':'balancesheets', 'TaiwanStockCashFlowsStatement':'cashflow', 'TaiwanStockFinancialStatements':'financialstatements', 'TaiwanStockPrice':'stockprices'}
+    print(f"Entering update financials {dataset} for table {reference_dict[dataset]}")
     duplicate = execute_read_query(connection, reference_dict[dataset], f"SELECT symbol, date FROM {reference_dict[dataset]}")
     duplicate_dict = {} # For storing key-value pair duplicates (e.g. '1101':['2023-09-31', '2024-04-30', ....], ...)
     duplicate_symbol = list(set([entry['symbol'] for entry in duplicate])) # all unique entries of stock symbols
@@ -727,9 +727,9 @@ def update_currentprice(connection, interval = 5):
     count = 1
     for symbol in symbol_ls:
         print(f"Updating {symbol}: Count {count} of {len(symbol_ls)}")
-        sql_query = f"SELECT datetime, price FROM currentprice WHERE symbol = '{symbol}"
+        sql_query = f"SELECT datetime, price FROM currentprice WHERE symbol = '{symbol}';"
         stock_data = execute_read_query(connection, 'currentprice', sql_query) # list of dictionaries
-        if len(stock_data) >= 1674: # this number because 54 entries a day (market open to close) and 31 days per month
+        if stock_data != None and len(stock_data) >= 1674: # this number because 54 entries a day (market open to close) and 31 days per month
             # delete the earliest entry for the stock
             sql_delete = f"""
             DELETE FROM currentprice
@@ -752,7 +752,7 @@ def update_currentprice(connection, interval = 5):
         );
         """
         # construct output tuple
-        output_tuple = tuple(symbol, current_datetime, price)
+        output_tuple = (symbol, current_datetime, price)
         # insert into table
         execute_query(connection, insert_sql, output_tuple)
         count += 1
@@ -983,6 +983,7 @@ def remove_outdated_jobs(tz):
     now = datetime.datetime.now(tz)
     if now.hour >= 13 and now.minute >= 30:
         schedule.clear('currentprice')
+        print("Removing scheduled stock price thread...")
 # Method for scheduling the currentprice update
 def schedule_currentprice_update(tz, interval):
     now = datetime.datetime.now(tz)
@@ -1000,7 +1001,7 @@ if __name__ == "__main__":
     # execute_query(connection, create_stockprices)
     # execute_query(connection, create_dividendrates)
     # execute_query(connection, create_marketindex)
-    # execute_query(connection, create_currentpricetable)
+    execute_query(connection, create_currentpricetable)
 
     # Section to update all databases
     # update_news(connection)
@@ -1014,12 +1015,12 @@ if __name__ == "__main__":
     # update_currentprice(connection, 5)
 
     # Update through threading and scheduling
-    currentprice_minutes = 5 # define interval for updating current price
+    currentprice_minutes = 0.25 # define interval for updating current price
     tz = pytz.timezone('Asia/Taipei')
     # schedule update_currentprice to run every {minutes} minutes 
-    schedule.every(currentprice_minutes).minutes.do(schedule_currentprice_update).tag('currentprice')
+    schedule.every(currentprice_minutes).minutes.do(schedule_currentprice_update, tz, currentprice_minutes).tag('currentprice')
     # schedule other updates for other market times
-    pre_market_time = "07:30" # run once during pre market
+    pre_market_time = "07:30" # run once for pre market
     post_market_time = "14:00" # run second time post market
     # pre market run
     schedule.every().day.at(pre_market_time).do(run_threaded, update_news, connection)
@@ -1043,7 +1044,10 @@ if __name__ == "__main__":
     print("Entering scheduler loop...")
     # Run the scheduler in a loop
     while True:
-        schedule.run_pending()
+        try:
+            schedule.run_pending()
+        except Exception as e:
+            print(f"Error: {e}")
         remove_outdated_jobs(tz)
         time.sleep(60) # sleep for 60 seconds
 
