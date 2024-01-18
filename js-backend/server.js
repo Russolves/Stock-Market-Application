@@ -23,7 +23,7 @@ const pool = mysql.createPool({ // access through environment variables
 app.get('/stocks', (req, res) => {
     pool.query("SELECT * FROM stocks WHERE symbol = '2330'", (err, results, fields) => {
         if (err) {
-            res.status(500).send('Something went wrong with the API call for the "stocks" table');
+            res.status(500).send('Something went wrong with the API call for the "stocks" table:', err);
         } else {
             // console.log('These are the results:', results); // results is a list!
             res.status(200).json(results);

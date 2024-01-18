@@ -14,6 +14,9 @@ import yfinance as yf # Version 0.2.33
 from googletrans import Translator # Version 4.0.0rc1
 import pandas as pd # Version 2.1.4
 import schedule # Version 1.2.1
+import logging
+from flask import Flask, jsonify, request # Version 3.0.0
+app = Flask(__name__) # initialize flask app at beginning
 
 # Load environmental variables from .env file within python-backend
 load_dotenv()
@@ -234,8 +237,10 @@ def create_connection(host_name, user_name, user_password, db_name):
             database = db_name
         )
         print("Connection to MySQL DB successful!")
+        logging.info('Connection to MySQL DB successful!')
     except Error as e:
         print(f"Error {e} during connection to database")
+        logging.error(f"Error {e} occurred during connection to MySQL database")
     return connection
 
 # Method for executing SQL queries
@@ -247,6 +252,7 @@ def execute_query(connection, query, params = None):
         print("Query execution successful!")
     except Error as e:
         print(f"The error {e} occurred during query execution")
+        logging.error(f"The error {e} occurred during query execution")
 
 # Method for reading a specific table from within the database
 def execute_read_query(connection, table, query = None):
@@ -260,6 +266,7 @@ def execute_read_query(connection, table, query = None):
         return result
     except Error as e:
         print(f"The error '{e}' occurred during reading")
+        logging.error(f"The error '{e}' occurred during reading")
 
 # Method for translating text using googletrans
 def translate_text(text, target_language = 'zh-tw'):
@@ -291,6 +298,7 @@ def retrieve_news(page = ''):
 # Method to run everyday in order to update news (run once every 10 min)
 def update_news(connection):
     print("Retrieving latest Taiwanese business news articles")
+    logging.info("Retrieving latest Taiwanese business news articles")
     # Retrieve all 公司簡稱 names into a list
     stock_names = [entry['shortname'] for entry in execute_read_query(connection, "stocks", "SELECT shortname FROM stocks;")]
     
@@ -303,6 +311,7 @@ def update_news(connection):
         status, news, nextpage = retrieve_news(nextpage)
         if status['status'] == 'error': # exit if error occurs
             print(f"News API call error:\nMessage:{status['message']}\nCode:{status['code']}")
+            logging.info(f"News API call error:\nMessage:{status['message']}\nCode:{status['code']}")
             break
         news_id_ls = [value for entry in news for key, value in entry.items() if key == 'article_id']
         news_id_set = set(news_id_ls) # generate set of article_ids (api call)
@@ -394,7 +403,9 @@ def retrieve_stocks(url, p = None):
         data = response.json()
     except json.JSONDecodeError:
         print("Response not in JSON format")
+        logging.info("Response not in JSON format")
         print(f"{response}")
+        logging.info(f"{response}")
         data = {'status':502, 'msg':'Bad gateway: server seems to be experiencing issues (received invalid response from upstream server)'}
     return data
 
@@ -404,6 +415,7 @@ def update_stocks(connection):
     count = 1
     for stock in twse_data:
         print(f"Updating {count} of {len(twse_data)} for latest stock data")
+        logging.info(f"Updating {count} of {len(twse_data)} for latest stock data")
         shortname, longname, english_name, website, address, email, phone, fax, chairman, ceo, spokesperson, acting_spokesperson = None, None, None, None, None, None, None, None, None, None, None, None # Define None types first
         for key in list(stock.keys()):
             if key == '公司代號':
@@ -549,6 +561,7 @@ def update_stocks(connection):
 def update_financials(connection, dataset, columns_list, insert_sql):
     reference_dict = {'TaiwanStockBalanceSheet':'balancesheets', 'TaiwanStockCashFlowsStatement':'cashflow', 'TaiwanStockFinancialStatements':'financialstatements', 'TaiwanStockPrice':'stockprices'}
     print(f"Entering update financials {dataset} for table {reference_dict[dataset]}")
+    logging.info(f"Entering update financials {dataset} for table {reference_dict[dataset]}")
     duplicate = execute_read_query(connection, reference_dict[dataset], f"SELECT symbol, date FROM {reference_dict[dataset]}")
     duplicate_dict = {} # For storing key-value pair duplicates (e.g. '1101':['2023-09-31', '2024-04-30', ....], ...)
     duplicate_symbol = list(set([entry['symbol'] for entry in duplicate])) # all unique entries of stock symbols
@@ -560,6 +573,7 @@ def update_financials(connection, dataset, columns_list, insert_sql):
         duplicate_dict[symbol] = date_ls
 
     print(f"Running dataset {dataset}")
+    logging.info(f"Running dataset {dataset}")
     stock_ls = [entry['symbol'] for entry in execute_read_query(connection, "stocks", "SELECT symbol FROM stocks;")]
     count = 1
     max_retries = 5 # set maximum retries
@@ -569,6 +583,7 @@ def update_financials(connection, dataset, columns_list, insert_sql):
         retries = 0
         while (status == 402 or status == 502) and retries < max_retries: # if msg request failed and retries < max_retries
             print(f"Retrieving {count} of {len(stock_ls)}, symbol: {stock} ({reference_dict[dataset]} table)")
+            logging.info(f"Retrieving {count} of {len(stock_ls)}, symbol: {stock} ({reference_dict[dataset]} table)")
             url = "https://api.finmindtrade.com/api/v4/data"
             param = {
                 'dataset':dataset,
@@ -582,6 +597,7 @@ def update_financials(connection, dataset, columns_list, insert_sql):
             if status == 200:
                 break
             print(f"Retrieval failed\nStatus:{status} Msg:{msg}\nRetrying again in {retry_delay} minutes")
+            logging.info(f"Retrieval failed\nStatus:{status} Msg:{msg}\nRetrying again in {retry_delay} minutes")
             time.sleep(retry_delay*60)
             retries += 1
         else:
@@ -629,12 +645,14 @@ def convert_unix_timestamp(unix_timestamp):
 # Method for retrieving dividends for each stock
 def update_dividends(connection):
     print(f"Updating dividend rates (daily update)")
+    logging.info(f"Updating dividend rates (daily update)")
     stocks_data = execute_read_query(connection, 'stocks', 'SELECT symbol FROM stocks;')
     symbol_ls = [stock['symbol'] for stock in stocks_data]
     date = datetime.datetime.now().strftime('%Y-%m-%d') # get current date
     count = 1
     for symbol in symbol_ls:
         print(f"Updating dividend rates {count} out of {len(symbol_ls)} for {symbol}")
+        logging.info(f"Updating dividend rates {count} out of {len(symbol_ls)} for {symbol}")
         symbol_TW = symbol + '.TW'
         stock = yf.Ticker(symbol_TW).info # stock is a dictionary (keys: address1, address2)
         dividendrate = stock['dividendRate'] if stock.get('dividendRate') else None
@@ -669,6 +687,7 @@ def update_dividends(connection):
 # Method for updating market index data
 def update_index(connection):
     print("Updating market indexes...")
+    logging.info("Updating market indexes...")
     index_data = [entry for entry in execute_read_query(connection, 'marketindex', 'SELECT index_symbol, date FROM marketindex;')] # list of dictionaries
     index_ls = list(set([entry['index_symbol'] for entry in index_data]))
     reference_dict = {} # initialize dictionary ('^DJI':['2024-01-02', '2024-01-03'...], '^GSPC':)
@@ -682,6 +701,7 @@ def update_index(connection):
     count = 1
     for entry in market_indexes:
         print(f"Updating market index: {entry} Count {count} of {len(market_indexes)}")
+        logging.info(f"Updating market index: {entry} Count {count} of {len(market_indexes)}")
         market_index = yf.download(entry) # pandas dataframe
         date_index = [date.strftime('%Y-%m-%d') for date in list(market_index.index)] # list of all dates within dataframe      
         duplicate_dict = {} # initialize dictionary ('2024-01-01':[list of values], '2024-01-02':[list of values] (in order), ...)
@@ -722,11 +742,13 @@ def update_index(connection):
 # Method to update currentprice table
 def update_currentprice(connection, interval = 5):
     print(f"Updating current price (in {interval} minute intervals)")
+    logging.info(f"Updating current price (in {interval} minute intervals)")
     stocks_data = execute_read_query(connection, 'stocks', 'SELECT symbol FROM stocks;')
     symbol_ls = [stock['symbol'] for stock in stocks_data]
     count = 1
     for symbol in symbol_ls:
         print(f"Updating {symbol}: Count {count} of {len(symbol_ls)}")
+        logging.info(f"Updating {symbol}: Count {count} of {len(symbol_ls)}")
         sql_query = f"SELECT datetime, price FROM currentprice WHERE symbol = '{symbol}';"
         stock_data = execute_read_query(connection, 'currentprice', sql_query) # list of dictionaries
         if stock_data != None and len(stock_data) >= 1674: # this number because 54 entries a day (market open to close) and 31 days per month
@@ -983,42 +1005,22 @@ def remove_outdated_jobs(tz):
     now = datetime.datetime.now(tz)
     if now.hour >= 13 and now.minute >= 30:
         schedule.clear('currentprice')
-        print("Removing scheduled stock price thread...")
+        print("Removed scheduled stock price thread...")
+        logging.info("Removed scheduled current stock price thread")
 # Method for scheduling the currentprice update
-def schedule_currentprice_update(tz, interval):
+def schedule_currentprice_update(connection, tz, interval):
     now = datetime.datetime.now(tz)
     if 9 <= now.hour < 13 or (now.hour == 13 and now.minute < 30):
         run_threaded(update_currentprice, connection, interval)
-    
-if __name__ == "__main__":
-    connection = create_connection(host, user, password, database) #Establish SQL connection
-    # Code for creating tables
-    # execute_query(connection, create_newstable)
-    # execute_query(connection, create_stocktable)
-    # execute_query(connection, create_balancesheettable)
-    # execute_query(connection, create_cashflowtable)
-    # execute_query(connection, create_financialstatements)
-    # execute_query(connection, create_stockprices)
-    # execute_query(connection, create_dividendrates)
-    # execute_query(connection, create_marketindex)
-    # execute_query(connection, create_currentpricetable)
 
-    # Section to update all databases
-    # update_news(connection)
-    # update_stocks(connection)
-    # update_financials(connection, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)
-    # update_financials(connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)
-    # update_financials(connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)
-    # update_dividends(connection)
-    # update_index(connection)
-    # update_financials(connection, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice)
-    # update_currentprice(connection, 5)
-
-    # Update through threading and scheduling
+# Method to update every table present within mySQL database
+def update():
+    connection = create_connection(host, user, password, database) # Establish SQL connection
+     # Update through threading and scheduling
     currentprice_minutes = 5 # define interval for updating current price
     tz = pytz.timezone('Asia/Taipei')
     # schedule update_currentprice to run every {minutes} minutes 
-    schedule.every(currentprice_minutes).minutes.do(schedule_currentprice_update, tz, currentprice_minutes).tag('currentprice')
+    schedule.every(currentprice_minutes).minutes.do(schedule_currentprice_update, connection, tz, currentprice_minutes).tag('currentprice')
     # schedule news updates to run every 2 hours
     schedule.every(0.25).minutes.do(run_threaded, update_news, connection).tag('news')
     # schedule other updates for other market times
@@ -1042,15 +1044,57 @@ if __name__ == "__main__":
     schedule.every().day.at(post_market_time).do(run_threaded, update_index, connection)
     schedule.every().day.at(post_market_time).do(run_threaded, update_financials, connection, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice)
 
+    # Run the scheduler on loop until the end of the day (11:59 PM)
+    end_of_day_time = datetime.time(23, 59, 0)
+    end_of_day = datetime.datetime.combine(datetime.datetime.now(tz).date(), end_of_day_time, tz)
+
     print("Entering scheduler loop...")
-    # Run the scheduler in a loop
-    while True:
+    logging.info("Entering scheduler loop...")
+    # Run the scheduler in a loop for the entire day
+    while datetime.datetime.now(tz)< end_of_day:
         try:
             schedule.run_pending()
         except Exception as e:
             print(f"Error: {e}")
+            logging.error(f"Error occurred during scheduler/threading method update(): {e}")
         remove_outdated_jobs(tz)
         time.sleep(60) # sleep for 60 seconds
+# App route
+@app.route('/update', methods = ['GET'])
+def update_route():
+    if request.headers.get('Handshake') == 'confirmed': # request for handshake (security)
+        update() # call the update function
+        return jsonify({'status':200, 'message':'Success'})
+    else:
+        return jsonify({'status':400, 'message':'Fail'})
+if __name__ == "__main__":
+    # Configure logging
+    logging.basicConfig(level = logging.INFO)
+    logging.info("Deployment of service confirmed...")
+    app.run(host = '0.0.0.0', port = int(os.environ.get('PORT', 8080)))
+    # connection = create_connection(host, user, password, database) #Establish SQL connection
+    # Code for creating tables
+    # execute_query(connection, create_newstable)
+    # execute_query(connection, create_stocktable)
+    # execute_query(connection, create_balancesheettable)
+    # execute_query(connection, create_cashflowtable)
+    # execute_query(connection, create_financialstatements)
+    # execute_query(connection, create_stockprices)
+    # execute_query(connection, create_dividendrates)
+    # execute_query(connection, create_marketindex)
+    # execute_query(connection, create_currentpricetable)
+
+    # Section to update all databases
+    # update_news(connection)
+    # update_stocks(connection)
+    # update_financials(connection, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)
+    # update_financials(connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)
+    # update_financials(connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)
+    # update_dividends(connection)
+    # update_index(connection)
+    # update_financials(connection, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice)
+    # update_currentprice(connection, 5)
+    # update(connection) # update everything through scheduling and threading
 
     # Queries to SQL database
     # print(execute_read_query(connection, "newsarticles", "SELECT keywords FROM newsarticles;"))

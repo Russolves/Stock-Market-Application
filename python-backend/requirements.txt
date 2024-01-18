@@ -1,8 +1,9 @@
 requests==2.31.0
-dotenv==1.0.0
+python-dotenv==1.0.0
 mysql-connector-python==8.2.0
 snownlp==0.12.3
 yfinance==0.2.33
 googletrans==4.0.0rc1
 pandas==2.1.4
 schedule==1.2.1
+flask==3.0.0
