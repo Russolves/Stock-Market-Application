@@ -18,6 +18,8 @@ import logging
 import traceback
 from flask import Flask, jsonify, request # Version 3.0.0
 app = Flask(__name__) # initialize flask app at beginning
+# from google.cloud import tasks_v2
+# from google.protobuf import timestamp_pb2
 
 # Load environmental variables from .env file within python-backend
 load_dotenv()
@@ -1072,231 +1074,340 @@ INSERT INTO stockprices (
 #     connection = create_connection(host, user, password, database)
 #     return jsonify({"status":200, "message":"Success"})
 
+# @app.route('/start-task/<task_type>')
+# def start_task(task_type):
+#     # Create a task for long-running process
+#     client = tasks_v2.CloudTasksClient()
+#     parent = client.queue_path('annular-text-410704', 'asia-east1', 'task-queue')
+#     # Determine the endpoint based on the task type
+#     if task_type == 'currentprices':
+#         relative_uri = "/currentprices"
+#     task = {
+#         'app_engine_http_request': {
+#             'http_method': 'GET',
+#             'relative_uri': relative_uri,
+#             'headers':{'Handshake':'confirmed1'}
+#         }
+#     }
+#     # Schedule task immediately
+#     timestamp = timestamp_pb2.Timestamp()
+#     timestamp.FromDatetime(datetime.datetime.utcnow())
+#     task['schedule_time'] = timestamp
+#     client.create_task(parent=parent, task=task)
+
+#     return f'Task {task_type} started!', 200
+
+
 # App routes
+# @app.route('/currentprices', methods = ['GET'])
+# def update_currentpricesroute():
+#     logging.info("/update current prices API endpoint called!")
+#     if request.headers.get('Handshake') == 'confirmed1': # request for handshake (security)
+#         try:
+#             # Run update_currentprice in a background thread
+#             thread = threading.Thread(target=update_currentprices_connection)
+#             thread.start()
+#             # Immediately return a response
+#             return jsonify({'status': 200, 'message': 'Update process started'})
+#         except Exception as e:
+#             error_message = str(e)
+#             error_traceback = traceback.format_exc()  # This will give you the full traceback
+#             print("Error occurred:", error_message)
+#             print("Traceback:", error_traceback)
+#             # Optionally, log the error to a file or logging service
+#             return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
+#         # else:
+#         #     if connection:
+#         #         connection.close() # close the connection if it is open
+#         #         logging.info("Data connection closed ready for next day run")
+#         #     return jsonify({'status': 200, 'message': 'Success'})
+#     else:
+#         return jsonify({'status':400, 'message':'Fail'})
+# def update_currentprices_connection():
+#     connection = create_connection(host, user, password, database)  # Establish SQL connection
+#     try:
+#         update_currentprice(connection, 5)
+#     finally:
+#         if connection:
+#             connection.close()
+#             logging.info("Data Connection closed upon completion!")
+
+# Define a function to handle the background task for each route
+def background_task(task_func, handshake_key, *args):
+    logging.info(f"/{task_func.__name__} API endpoint called!")
+    if request.headers.get('Handshake') == handshake_key: # request for handshake (security)
+        try:
+            connection = create_connection(host, user, password, database) # Establish SQL connection
+            task_func(connection, *args)  # call the update function
+        except Exception as e:
+            error_message = str(e)
+            error_traceback = traceback.format_exc()  # This will give you the full traceback
+            print("Error occurred:", error_message)
+            print("Traceback:", error_traceback)
+            if connection:
+                connection.close() # close the connection if it is open
+                logging.info("Data connection closed due to error")
+        else:
+            if connection:
+                connection.close() # close the connection if it is open
+                logging.info("Data connection closed upon success ready for next run")
+    else:
+        logging.error("Invalid handshake key received")
+
+# Update each route to use threading
 @app.route('/currentprices', methods = ['GET'])
 def update_currentpricesroute():
-    logging.info("/update current prices API endpoint called!")
-    if request.headers.get('Handshake') == 'confirmed1': # request for handshake (security)
-        try:
-            connection = create_connection(host, user, password, database) # Establish SQL connection
-            update_currentprice(connection, 5)  # call the update function
-        except Exception as e:
-            error_message = str(e)
-            error_traceback = traceback.format_exc()  # This will give you the full traceback
-            print("Error occurred:", error_message)
-            print("Traceback:", error_traceback)
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed due to error")
-            # Optionally, log the error to a file or logging service
-            return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
-        else:
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed ready for next day run")
-            return jsonify({'status': 200, 'message': 'Success'})
-    else:
-        return jsonify({'status':400, 'message':'Fail'})
+    thread = threading.Thread(target=background_task, args=(update_currentprice, 'confirmed1', 5)) # 5 minute interval
+    thread.start()
+    return jsonify({'status':200, 'message': 'Update current prices process started'})
 
-@app.route('/updatenews', methods = ['GET'])
+@app.route('/updatenews', methods=['GET'])
 def update_newsroute():
-    logging.info("/updatenews API endpoint called!")
-    if request.headers.get('Handshake') == 'confirmed2': # request for handshake (security)
-        try:
-            connection = create_connection(host, user, password, database) # Establish SQL connection
-            update_news(connection)  # call the update function
-        except Exception as e:
-            error_message = str(e)
-            error_traceback = traceback.format_exc()  # This will give you the full traceback
-            print("Error occurred:", error_message)
-            print("Traceback:", error_traceback)
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed due to error")
-            # Optionally, log the error to a file or logging service
-            return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
-        else:
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed ready for next day run")
-            return jsonify({'status': 200, 'message': 'Success'})
-    else:
-        return jsonify({'status':400, 'message':'Fail'})
-    
-@app.route('/updatestocks', methods = ['GET'])
+    thread = threading.Thread(target=background_task, args=(update_news, 'confirmed2'))
+    thread.start()
+    return jsonify({'status': 200, 'message': 'Update news process started'})
+
+@app.route('/updatestocks', methods=['GET'])
 def update_stocksroute():
-    logging.info("/update stocks API endpoint called!")
-    if request.headers.get('Handshake') == 'confirmed3': # request for handshake (security)
-        try:
-            connection = create_connection(host, user, password, database) # Establish SQL connection
-            update_stocks(connection)  # call the update function
-        except Exception as e:
-            error_message = str(e)
-            error_traceback = traceback.format_exc()  # This will give you the full traceback
-            print("Error occurred:", error_message)
-            print("Traceback:", error_traceback)
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed due to error")
-            # Optionally, log the error to a file or logging service
-            return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
-        else:
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed ready for next day run")
-            return jsonify({'status': 200, 'message': 'Success'})
-    else:
-        return jsonify({'status':400, 'message':'Fail'})
+    thread = threading.Thread(target=background_task, args=(update_stocks, 'confirmed3'))
+    thread.start()
+    return jsonify({'status': 200, 'message': 'Update stocks process started'})
 
-@app.route('/updatebalancesheet', methods = ['GET'])
+@app.route('/updatebalancesheet', methods=['GET'])
 def update_balancesheetroute():
-    logging.info("/update balancesheet API endpoint called!")
-    if request.headers.get('Handshake') == 'confirmed4': # request for handshake (security)
-        try:
-            connection = create_connection(host, user, password, database) # Establish SQL connection
-            update_financials(connection, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)  # call the update function
-        except Exception as e:
-            error_message = str(e)
-            error_traceback = traceback.format_exc()  # This will give you the full traceback
-            print("Error occurred:", error_message)
-            print("Traceback:", error_traceback)
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed due to error")
-            # Optionally, log the error to a file or logging service
-            return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
-        else:
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed ready for next day run")
-            return jsonify({'status': 200, 'message': 'Success'})
-    else:
-        return jsonify({'status':400, 'message':'Fail'})
+    thread = threading.Thread(target=background_task, args=(update_financials, 'confirmed4', "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet))
+    thread.start()
+    return jsonify({'status': 200, 'message': 'Update balance sheet process started'})
 
-@app.route('/updatecashflow', methods = ['GET'])
+@app.route('/updatecashflow', methods=['GET'])
 def update_cashflowroute():
-    logging.info("/update cash flow API endpoint called!")
-    if request.headers.get('Handshake') == 'confirmed5': # request for handshake (security)
-        try:
-            connection = create_connection(host, user, password, database) # Establish SQL connection
-            update_financials(connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)  # call the update function
-        except Exception as e:
-            error_message = str(e)
-            error_traceback = traceback.format_exc()  # This will give you the full traceback
-            print("Error occurred:", error_message)
-            print("Traceback:", error_traceback)
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed due to error")
-            # Optionally, log the error to a file or logging service
-            return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
-        else:
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed ready for next day run")
-            return jsonify({'status': 200, 'message': 'Success'})
-    else:
-        return jsonify({'status':400, 'message':'Fail'})
+    thread = threading.Thread(target=background_task, args=(update_financials, 'confirmed5', "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow))
+    thread.start()
+    return jsonify({'status': 200, 'message': 'Update cash flow process started'})
 
-@app.route('/updatefinancialstatement', methods = ['GET'])
+@app.route('/updatefinancialstatement', methods=['GET'])
 def update_financialstatementroute():
-    logging.info("/update financial statement API endpoint called!")
-    if request.headers.get('Handshake') == 'confirmed6': # request for handshake (security)
-        try:
-            connection = create_connection(host, user, password, database) # Establish SQL connection
-            update_financials(connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)  # call the update function
-        except Exception as e:
-            error_message = str(e)
-            error_traceback = traceback.format_exc()  # This will give you the full traceback
-            print("Error occurred:", error_message)
-            print("Traceback:", error_traceback)
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed due to error")
-            # Optionally, log the error to a file or logging service
-            return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
-        else:
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed ready for next day run")
-            return jsonify({'status': 200, 'message': 'Success'})
-    else:
-        return jsonify({'status':400, 'message':'Fail'})
-    
-@app.route('/updatedividends', methods = ['GET'])
+    thread = threading.Thread(target=background_task, args=(update_financials, 'confirmed6', "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement))
+    thread.start()
+    return jsonify({'status': 200, 'message': 'Update financial statement process started'})
+
+@app.route('/updatedividends', methods=['GET'])
 def update_dividendsroute():
-    logging.info("/update dividends API endpoint called!")
-    if request.headers.get('Handshake') == 'confirmed7': # request for handshake (security)
-        try:
-            connection = create_connection(host, user, password, database) # Establish SQL connection
-            update_dividends(connection)  # call the update function
-        except Exception as e:
-            error_message = str(e)
-            error_traceback = traceback.format_exc()  # This will give you the full traceback
-            print("Error occurred:", error_message)
-            print("Traceback:", error_traceback)
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed due to error")
-            # Optionally, log the error to a file or logging service
-            return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
-        else:
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed ready for next day run")
-            return jsonify({'status': 200, 'message': 'Success'})
-    else:
-        return jsonify({'status':400, 'message':'Fail'})
+    thread = threading.Thread(target=background_task, args=(update_dividends, 'confirmed7'))
+    thread.start()
+    return jsonify({'status': 200, 'message': 'Update dividends process started'})
 
-@app.route('/updateindex', methods = ['GET'])
+@app.route('/updateindex', methods=['GET'])
 def update_indexroute():
-    logging.info("/update market index API endpoint called!")
-    if request.headers.get('Handshake') == 'confirmed8': # request for handshake (security)
-        try:
-            connection = create_connection(host, user, password, database) # Establish SQL connection
-            update_index(connection)  # call the update function
-        except Exception as e:
-            error_message = str(e)
-            error_traceback = traceback.format_exc()  # This will give you the full traceback
-            print("Error occurred:", error_message)
-            print("Traceback:", error_traceback)
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed due to error")
-            # Optionally, log the error to a file or logging service
-            return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
-        else:
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed ready for next day run")
-            return jsonify({'status': 200, 'message': 'Success'})
-    else:
-        return jsonify({'status':400, 'message':'Fail'})
+    thread = threading.Thread(target=background_task, args=(update_index, 'confirmed8'))
+    thread.start()
+    return jsonify({'status': 200, 'message': 'Update market index process started'})
 
-@app.route('/updatestockprice', methods = ['GET'])
+@app.route('/updatestockprice', methods=['GET'])
 def update_stockpriceroute():
-    logging.info("/update history stock price API endpoint called!")
-    if request.headers.get('Handshake') == 'confirmed9': # request for handshake (security)
-        try:
-            connection = create_connection(host, user, password, database) # Establish SQL connection
-            update_financials(connection, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice)  # call the update function
-        except Exception as e:
-            error_message = str(e)
-            error_traceback = traceback.format_exc()  # This will give you the full traceback
-            print("Error occurred:", error_message)
-            print("Traceback:", error_traceback)
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed due to error")
-            # Optionally, log the error to a file or logging service
-            return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
-        else:
-            if connection:
-                connection.close() # close the connection if it is open
-                logging.info("Data connection closed ready for next day run")
-            return jsonify({'status': 200, 'message': 'Success'})
-    else:
-        return jsonify({'status':400, 'message':'Fail'})
+    thread = threading.Thread(target=background_task, args=(update_financials, 'confirmed9', "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice))
+    thread.start()
+    return jsonify({'status': 200, 'message': 'Update history stock price process started'})
+
+# @app.route('/updatenews', methods = ['GET'])
+# def update_newsroute():
+#     logging.info("/updatenews API endpoint called!")
+#     if request.headers.get('Handshake') == 'confirmed2': # request for handshake (security)
+#         try:
+#             connection = create_connection(host, user, password, database) # Establish SQL connection
+#             update_news(connection)  # call the update function
+#         except Exception as e:
+#             error_message = str(e)
+#             error_traceback = traceback.format_exc()  # This will give you the full traceback
+#             print("Error occurred:", error_message)
+#             print("Traceback:", error_traceback)
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed due to error")
+#             # Optionally, log the error to a file or logging service
+#             return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
+#         else:
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed ready for next day run")
+#             return jsonify({'status': 200, 'message': 'Success'})
+#     else:
+#         return jsonify({'status':400, 'message':'Fail'})
+    
+# @app.route('/updatestocks', methods = ['GET'])
+# def update_stocksroute():
+#     logging.info("/update stocks API endpoint called!")
+#     if request.headers.get('Handshake') == 'confirmed3': # request for handshake (security)
+#         try:
+#             connection = create_connection(host, user, password, database) # Establish SQL connection
+#             update_stocks(connection)  # call the update function
+#         except Exception as e:
+#             error_message = str(e)
+#             error_traceback = traceback.format_exc()  # This will give you the full traceback
+#             print("Error occurred:", error_message)
+#             print("Traceback:", error_traceback)
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed due to error")
+#             # Optionally, log the error to a file or logging service
+#             return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
+#         else:
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed ready for next day run")
+#             return jsonify({'status': 200, 'message': 'Success'})
+#     else:
+#         return jsonify({'status':400, 'message':'Fail'})
+
+# @app.route('/updatebalancesheet', methods = ['GET'])
+# def update_balancesheetroute():
+#     logging.info("/update balancesheet API endpoint called!")
+#     if request.headers.get('Handshake') == 'confirmed4': # request for handshake (security)
+#         try:
+#             connection = create_connection(host, user, password, database) # Establish SQL connection
+#             update_financials(connection, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)  # call the update function
+#         except Exception as e:
+#             error_message = str(e)
+#             error_traceback = traceback.format_exc()  # This will give you the full traceback
+#             print("Error occurred:", error_message)
+#             print("Traceback:", error_traceback)
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed due to error")
+#             # Optionally, log the error to a file or logging service
+#             return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
+#         else:
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed ready for next day run")
+#             return jsonify({'status': 200, 'message': 'Success'})
+#     else:
+#         return jsonify({'status':400, 'message':'Fail'})
+
+# @app.route('/updatecashflow', methods = ['GET'])
+# def update_cashflowroute():
+#     logging.info("/update cash flow API endpoint called!")
+#     if request.headers.get('Handshake') == 'confirmed5': # request for handshake (security)
+#         try:
+#             connection = create_connection(host, user, password, database) # Establish SQL connection
+#             update_financials(connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)  # call the update function
+#         except Exception as e:
+#             error_message = str(e)
+#             error_traceback = traceback.format_exc()  # This will give you the full traceback
+#             print("Error occurred:", error_message)
+#             print("Traceback:", error_traceback)
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed due to error")
+#             # Optionally, log the error to a file or logging service
+#             return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
+#         else:
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed ready for next day run")
+#             return jsonify({'status': 200, 'message': 'Success'})
+#     else:
+#         return jsonify({'status':400, 'message':'Fail'})
+
+# @app.route('/updatefinancialstatement', methods = ['GET'])
+# def update_financialstatementroute():
+#     logging.info("/update financial statement API endpoint called!")
+#     if request.headers.get('Handshake') == 'confirmed6': # request for handshake (security)
+#         try:
+#             connection = create_connection(host, user, password, database) # Establish SQL connection
+#             update_financials(connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)  # call the update function
+#         except Exception as e:
+#             error_message = str(e)
+#             error_traceback = traceback.format_exc()  # This will give you the full traceback
+#             print("Error occurred:", error_message)
+#             print("Traceback:", error_traceback)
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed due to error")
+#             # Optionally, log the error to a file or logging service
+#             return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
+#         else:
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed ready for next day run")
+#             return jsonify({'status': 200, 'message': 'Success'})
+#     else:
+#         return jsonify({'status':400, 'message':'Fail'})
+    
+# @app.route('/updatedividends', methods = ['GET'])
+# def update_dividendsroute():
+#     logging.info("/update dividends API endpoint called!")
+#     if request.headers.get('Handshake') == 'confirmed7': # request for handshake (security)
+#         try:
+#             connection = create_connection(host, user, password, database) # Establish SQL connection
+#             update_dividends(connection)  # call the update function
+#         except Exception as e:
+#             error_message = str(e)
+#             error_traceback = traceback.format_exc()  # This will give you the full traceback
+#             print("Error occurred:", error_message)
+#             print("Traceback:", error_traceback)
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed due to error")
+#             # Optionally, log the error to a file or logging service
+#             return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
+#         else:
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed ready for next day run")
+#             return jsonify({'status': 200, 'message': 'Success'})
+#     else:
+#         return jsonify({'status':400, 'message':'Fail'})
+
+# @app.route('/updateindex', methods = ['GET'])
+# def update_indexroute():
+#     logging.info("/update market index API endpoint called!")
+#     if request.headers.get('Handshake') == 'confirmed8': # request for handshake (security)
+#         try:
+#             connection = create_connection(host, user, password, database) # Establish SQL connection
+#             update_index(connection)  # call the update function
+#         except Exception as e:
+#             error_message = str(e)
+#             error_traceback = traceback.format_exc()  # This will give you the full traceback
+#             print("Error occurred:", error_message)
+#             print("Traceback:", error_traceback)
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed due to error")
+#             # Optionally, log the error to a file or logging service
+#             return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
+#         else:
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed ready for next day run")
+#             return jsonify({'status': 200, 'message': 'Success'})
+#     else:
+#         return jsonify({'status':400, 'message':'Fail'})
+
+# @app.route('/updatestockprice', methods = ['GET'])
+# def update_stockpriceroute():
+#     logging.info("/update history stock price API endpoint called!")
+#     if request.headers.get('Handshake') == 'confirmed9': # request for handshake (security)
+#         try:
+#             connection = create_connection(host, user, password, database) # Establish SQL connection
+#             update_financials(connection, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice)  # call the update function
+#         except Exception as e:
+#             error_message = str(e)
+#             error_traceback = traceback.format_exc()  # This will give you the full traceback
+#             print("Error occurred:", error_message)
+#             print("Traceback:", error_traceback)
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed due to error")
+#             # Optionally, log the error to a file or logging service
+#             return jsonify({'status': 500, 'message': 'Internal Server Error', 'error': error_message}), 500
+#         else:
+#             if connection:
+#                 connection.close() # close the connection if it is open
+#                 logging.info("Data connection closed ready for next day run")
+#             return jsonify({'status': 200, 'message': 'Success'})
+#     else:
+#         return jsonify({'status':400, 'message':'Fail'})
 
 if __name__ == "__main__":
     # Configure logging

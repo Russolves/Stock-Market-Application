@@ -8,3 +8,4 @@ googletrans==4.0.0rc1
 pandas==2.1.4
 schedule==1.2.1
 flask==3.0.0
+# google-cloud-tasks # install latest version
