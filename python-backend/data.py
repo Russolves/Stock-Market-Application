@@ -1133,9 +1133,9 @@ INSERT INTO stockprices (
 #             logging.info("Data Connection closed upon completion!")
 
 # Define a function to handle the background task for each route
-def background_task(task_func, handshake_key, *args):
+def background_task(task_func, handshake_key, handshake_value, *args):
     logging.info(f"/{task_func.__name__} API endpoint called!")
-    if request.headers.get('Handshake') == handshake_key: # request for handshake (security)
+    if handshake_value == handshake_key: # request for handshake (security)
         try:
             connection = create_connection(host, user, password, database) # Establish SQL connection
             task_func(connection, *args)  # call the update function
@@ -1157,55 +1157,64 @@ def background_task(task_func, handshake_key, *args):
 # Update each route to use threading
 @app.route('/currentprices', methods = ['GET'])
 def update_currentpricesroute():
-    thread = threading.Thread(target=background_task, args=(update_currentprice, 'confirmed1', 5)) # 5 minute interval
+    handshake_value = request.headers.get('Handshake')  # Get handshake value from request
+    thread = threading.Thread(target=background_task, args=(update_currentprice, 'confirmed1', handshake_value, 5)) # 5 minute interval
     thread.start()
     return jsonify({'status':200, 'message': 'Update current prices process started'})
 
 @app.route('/updatenews', methods=['GET'])
 def update_newsroute():
-    thread = threading.Thread(target=background_task, args=(update_news, 'confirmed2'))
+    handshake_value = request.headers.get('Handshake')  # Get handshake value from request
+    thread = threading.Thread(target=background_task, args=(update_news, 'confirmed2', handshake_value))
     thread.start()
     return jsonify({'status': 200, 'message': 'Update news process started'})
 
 @app.route('/updatestocks', methods=['GET'])
 def update_stocksroute():
-    thread = threading.Thread(target=background_task, args=(update_stocks, 'confirmed3'))
+    handshake_value = request.headers.get('Handshake')  # Get handshake value from request
+    thread = threading.Thread(target=background_task, args=(update_stocks, 'confirmed3', handshake_value))
     thread.start()
     return jsonify({'status': 200, 'message': 'Update stocks process started'})
 
 @app.route('/updatebalancesheet', methods=['GET'])
 def update_balancesheetroute():
-    thread = threading.Thread(target=background_task, args=(update_financials, 'confirmed4', "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet))
+    handshake_value = request.headers.get('Handshake')  # Get handshake value from request
+    thread = threading.Thread(target=background_task, args=(update_financials, 'confirmed4', handshake_value, "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet))
     thread.start()
     return jsonify({'status': 200, 'message': 'Update balance sheet process started'})
 
 @app.route('/updatecashflow', methods=['GET'])
 def update_cashflowroute():
-    thread = threading.Thread(target=background_task, args=(update_financials, 'confirmed5', "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow))
+    handshake_value = request.headers.get('Handshake')  # Get handshake value from request
+    thread = threading.Thread(target=background_task, args=(update_financials, 'confirmed5', handshake_value, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow))
     thread.start()
     return jsonify({'status': 200, 'message': 'Update cash flow process started'})
 
 @app.route('/updatefinancialstatement', methods=['GET'])
 def update_financialstatementroute():
-    thread = threading.Thread(target=background_task, args=(update_financials, 'confirmed6', "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement))
+    handshake_value = request.headers.get('Handshake')  # Get handshake value from request
+    thread = threading.Thread(target=background_task, args=(update_financials, 'confirmed6', handshake_value, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement))
     thread.start()
     return jsonify({'status': 200, 'message': 'Update financial statement process started'})
 
 @app.route('/updatedividends', methods=['GET'])
 def update_dividendsroute():
-    thread = threading.Thread(target=background_task, args=(update_dividends, 'confirmed7'))
+    handshake_value = request.headers.get('Handshake')  # Get handshake value from request
+    thread = threading.Thread(target=background_task, args=(update_dividends, 'confirmed7', handshake_value))
     thread.start()
     return jsonify({'status': 200, 'message': 'Update dividends process started'})
 
 @app.route('/updateindex', methods=['GET'])
 def update_indexroute():
-    thread = threading.Thread(target=background_task, args=(update_index, 'confirmed8'))
+    handshake_value = request.headers.get('Handshake')  # Get handshake value from request
+    thread = threading.Thread(target=background_task, args=(update_index, 'confirmed8', handshake_value))
     thread.start()
     return jsonify({'status': 200, 'message': 'Update market index process started'})
 
 @app.route('/updatestockprice', methods=['GET'])
 def update_stockpriceroute():
-    thread = threading.Thread(target=background_task, args=(update_financials, 'confirmed9', "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice))
+    handshake_value = request.headers.get('Handshake')  # Get handshake value from request
+    thread = threading.Thread(target=background_task, args=(update_financials, 'confirmed9', handshake_value, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice))
     thread.start()
     return jsonify({'status': 200, 'message': 'Update history stock price process started'})
 
