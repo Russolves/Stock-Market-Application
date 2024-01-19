@@ -407,7 +407,7 @@ def retrieve_stocks(url, p = None):
         response = requests.get(url, params = p)
         data = response.json()
     except json.JSONDecodeError:
-        print("Response not in JSON format")
+        print("Response not in JSON format:")
         # logging.info("Response not in JSON format")
         print(f"{response}")
         # logging.info(f"{response}")
@@ -418,6 +418,8 @@ def retrieve_stocks(url, p = None):
 def update_stocks(connection):
     twse_data = retrieve_stocks("https://openapi.twse.com.tw/v1/opendata/t187ap03_L")
     count = 1
+    if isinstance(twse_data, dict) and twse_data.get('status') != 200:
+        raise Exception("Retrieval of stock basic information seems to have encountered an error\n" + f"Response status: {twse_data.get('status')}\n" + f"Msg: {twse_data.get('msg')}")
     for stock in twse_data:
         print(f"Updating {count} of {len(twse_data)} for latest stock data")
         # logging.info(f"Updating {count} of {len(twse_data)} for latest stock data")
@@ -426,7 +428,15 @@ def update_stocks(connection):
             if key == '公司代號':
                 symbol = str(stock[key].strip())
                 symbol_query = str(symbol) + '.TW'
-                ystock = yf.Ticker(symbol_query).info
+                tries = 3
+                for i in range(tries): # try if yf.Ticker does not work
+                    try:
+                        ystock = yf.Ticker(symbol_query).info
+                    except Exception as e:
+                        print(f"Exception detected during retrieval of basic stock info:\n{e}")
+                        time.sleep(600)
+                    else:
+                        break
                 # Acquire corresponding data from yfinance
                 longbusinesssummary = ystock.get('longBusinessSummary', None).replace("'", "''") if ystock.get('longBusinessSummary') else None
                 if longbusinesssummary == None:
@@ -659,7 +669,15 @@ def update_dividends(connection):
         print(f"Updating dividend rates {count} out of {len(symbol_ls)} for {symbol}")
         # logging.info(f"Updating dividend rates {count} out of {len(symbol_ls)} for {symbol}")
         symbol_TW = symbol + '.TW'
-        stock = yf.Ticker(symbol_TW).info # stock is a dictionary (keys: address1, address2)
+        tries = 3
+        for i in range(tries):
+            try:
+                stock = yf.Ticker(symbol_TW).info # stock is a dictionary (keys: address1, address2)
+            except Exception as e:
+                print(f"Exception has occurred for yfinance during update of dividends:\n{e}")
+                time.sleep(600)
+            else:
+                break
         dividendrate = stock['dividendRate'] if stock.get('dividendRate') else None
         dividendyield = stock['dividendYield'] if stock.get('dividendYield') else None
         exdividenddate = convert_unix_timestamp(stock['exDividendDate'] if stock.get('exDividendDate') else None)
@@ -769,7 +787,15 @@ def update_currentprice(connection, interval = 5):
         current_datetime = datetime.datetime.now()
         # Get current market price for stock
         yf_query = symbol + '.TW'
-        stock = yf.Ticker(yf_query).info
+        tries = 3 # try if yf.Ticker breaks
+        for i in range(tries):
+            try:
+                stock = yf.Ticker(yf_query).info
+            except Exception as e:
+                print(f"Error has occured in yfinance during update of current price")
+                time.sleep(60)
+            else:
+                break
         price = stock.get('currentPrice')
         insert_sql = f"""
         INSERT INTO currentprice (
