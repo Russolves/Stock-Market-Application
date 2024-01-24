@@ -21,12 +21,19 @@ const pool = mysql.createPool({ // access through environment variables
 
 // send GET request to database (stocks table)
 app.get('/stocks', (req, res) => {
-    pool.query("SELECT * FROM stocks WHERE symbol = '2330'", (err, results, fields) => {
-        if (err) {
-            res.status(500).send('Something went wrong with the API call for the "stocks" table:', err);
-        } else {
-            // console.log('These are the results:', results); // results is a list!
-            res.status(200).json(results);
-        }
-    });
+    const symbol = req.headers['request'];
+    // console.log('This is the requested symbol:', symbol);
+    try{
+        pool.query(`SELECT * FROM stocks WHERE symbol = '${symbol}'`, (err, results, fields) => {
+            if (err) {
+                res.status(500).send('Something went wrong with the API call for the "stocks" table:', err);
+            } else {
+                // console.log('These are the results:', results); // results is a list of dictionaries!
+                res.status(200).json(results);
+            }
+        });
+    }
+    catch (Error) {
+        console.log('SQL select error during GET request /stocks:', Error);
+    };
 });
