@@ -21,7 +21,7 @@ const pool = mysql.createPool({ // access through environment variables
 
 // send GET request to database (stocks table)
 app.get('/stocks', (req, res) => {
-    const symbol = req.headers['request'];
+    const symbol = req.headers['symbol']; // Header example: {'Symbol':'2330}
     // console.log('This is the requested symbol:', symbol);
     try{
         pool.query(`SELECT * FROM stocks WHERE symbol = '${symbol}'`, (err, results, fields) => {
