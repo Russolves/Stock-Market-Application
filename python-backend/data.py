@@ -235,8 +235,8 @@ def create_connection(host_name, user_name, user_password, db_name):
     connection = None
     try:
         connection = mysql.connector.connect(
-            # host = host_name,
-            unix_socket = f"/cloudsql/{instance}",
+            # host = host_name, # COMMENT (for local)
+            unix_socket = f"/cloudsql/{instance}", # UNCOMMENT (for gcloud)
             user = user_name,
             passwd = user_password,
             database = db_name
@@ -577,15 +577,15 @@ def update_financials(connection, dataset, columns_list, insert_sql):
     reference_dict = {'TaiwanStockBalanceSheet':'balancesheets', 'TaiwanStockCashFlowsStatement':'cashflow', 'TaiwanStockFinancialStatements':'financialstatements', 'TaiwanStockPrice':'stockprices'}
     print(f"Entering update financials {dataset} for table {reference_dict[dataset]}")
     # logging.info(f"Entering update financials {dataset} for table {reference_dict[dataset]}")
-    duplicate = execute_read_query(connection, reference_dict[dataset], f"SELECT symbol, date FROM {reference_dict[dataset]}")
-    duplicate_dict = {} # For storing key-value pair duplicates (e.g. '1101':['2023-09-31', '2024-04-30', ....], ...)
-    duplicate_symbol = list(set([entry['symbol'] for entry in duplicate])) # all unique entries of stock symbols
-    for symbol in duplicate_symbol:
-        date_ls = [] # storing dates
-        for row in duplicate:
-            if row['symbol'] == symbol:
-                date_ls.append(str(row['date'])) # convert datetime object (SQL) to string (e.g. '1920-01-01')
-        duplicate_dict[symbol] = date_ls
+    # duplicate = execute_read_query(connection, reference_dict[dataset], f"SELECT symbol, date FROM {reference_dict[dataset]}")
+    # duplicate_dict = {} # For storing key-value pair duplicates (e.g. '1101':['2023-09-31', '2024-04-30', ....], ...)
+    # duplicate_symbol = list(set([entry['symbol'] for entry in duplicate])) # all unique entries of stock symbols
+    # for symbol in duplicate_symbol:
+    #     date_ls = [] # storing dates
+    #     for row in duplicate:
+    #         if row['symbol'] == symbol:
+    #             date_ls.append(str(row['date'])) # convert datetime object (SQL) to string (e.g. '1920-01-01')
+    #     duplicate_dict[symbol] = date_ls
 
     print(f"Running dataset {dataset}")
     # logging.info(f"Running dataset {dataset}")
@@ -594,6 +594,10 @@ def update_financials(connection, dataset, columns_list, insert_sql):
     max_retries = 5 # set maximum retries
     retry_delay = 13 # in minutes
     for stock in stock_ls:
+        duplicate = execute_read_query(connection, reference_dict[dataset], f"SELECT symbol, date FROM {reference_dict[dataset]} WHERE symbol = '{stock}'")
+        duplicate_dict = {} # For storing key-value pair duplicates (e.g. '1101':['2023-09-31', '2024-04-30', ....], ...)
+        date_ls = [str(value) for entry in duplicate for key, value in entry.items() if key == 'date']
+        duplicate_dict[stock] = date_ls
         status = 402
         retries = 0
         while (status == 402 or status == 502) and retries < max_retries: # if msg request failed and retries < max_retries
@@ -618,24 +622,38 @@ def update_financials(connection, dataset, columns_list, insert_sql):
         else:
             raise Exception("Retrieval of balance sheet data failed even after max retries have been reached")
 
-        figures = {type.lower():None for type in columns_list} # initialize empty dictionary
         # Writing the values into variables
         balance_sheet = balance_data['data']
         date_dict = {} # initialize empty dictionary (date:{figures}, date:{figures...})
-        for entry in balance_sheet:
-            date = entry['date']
-            for key, value in entry.items():
-                if key == 'type':
-                    if value in columns_list:
-                        type = value.lower()
-                        figures[type] = float(entry['value'])
-            date_dict[date] = figures # set key-value pair for dictionary
-        # Remove duplicate entries
-        for key in list(date_dict.keys()):
-            if duplicate_dict.get(stock) != None:
-                if key in duplicate_dict[stock]:
-                    date_dict.pop(key)
-        # Arrange the tuples in order (date_dict is emtpy if all are duplicates)
+        if dataset == 'TaiwanStockPrice':
+            for entry in balance_sheet:
+                figures = {type.lower():None for type in columns_list} # initialize empty dictionary
+                date = entry['date']
+                for key, value in entry.items():
+                    if key in columns_list:
+                        type = key.lower()
+                        figures[type] = float(value)
+                date_dict[date] = figures
+        else:
+            unique_dates = sorted(list(set([date['date'] for date in balance_sheet])), key = lambda x:datetime.datetime.strptime(x, '%Y-%m-%d'))
+            for date in unique_dates:
+                figures = {type.lower():None for type in columns_list} # initialize empty dictionary
+                for entry in balance_sheet:
+                    # date = entry['date']
+                    if date == entry['date']:
+                        for key, value in entry.items():
+                            if key == 'type':
+                                if value in columns_list:
+                                    type = value.lower()
+                                    figures[type] = float(entry['value'])
+                        date_dict[date] = figures # set key-value pair for dictionary
+        
+        # # Remove duplicate entries
+        # for key in list(date_dict.keys()):
+        #     if duplicate_dict.get(stock) != None:
+        #         if key in duplicate_dict[stock]:
+        #             date_dict.pop(key)
+        # Arrange the tuples in order (date_dict is empty if all are duplicates)
         for date in list(date_dict.keys()):
             key_tuple = (stock, date) # stock = symbol & key = date
             value_ls = []
@@ -645,6 +663,7 @@ def update_financials(connection, dataset, columns_list, insert_sql):
                         value_ls.append(value)
             value_tuple = tuple(value_ls)
             output_tuple = key_tuple + value_tuple # create larger tuple list
+            # print(output_tuple)
             execute_query(connection, insert_sql, output_tuple)
         # Next stock
         count += 1
@@ -809,6 +828,10 @@ def update_currentprice(connection, interval = 5):
         # insert into table
         execute_query(connection, insert_sql, output_tuple)
         count += 1
+# Method for heartbeat to confirm cloud scheduler working
+def update_heartbeat(connection):
+    if connection != None:
+        print("Heartbeat confirmed!")
 
 # For financials (balancesheet, cashflow and financialstatement)
 # Columns list
@@ -1244,6 +1267,13 @@ def update_stockpriceroute():
     thread.start()
     return jsonify({'status': 200, 'message': 'Update history stock price process started'})
 
+@app.route('/heartbeat', methods = ['GET'])
+def update_heartbeatroute():
+    handshake_value = request.headers.get('Handshake')
+    thread = threading.Thread(target = background_task, args = (update_heartbeat, 'confirmed10', handshake_value))
+    thread.start()
+    return jsonify({'status': 200, 'message':'Heartbeat API endpoint working as expected'})
+
 # @app.route('/updatenews', methods = ['GET'])
 # def update_newsroute():
 #     logging.info("/updatenews API endpoint called!")
@@ -1445,11 +1475,16 @@ def update_stockpriceroute():
 #         return jsonify({'status':400, 'message':'Fail'})
 
 if __name__ == "__main__":
+    # connection = create_connection(host, user, password, database) #Establish SQL connection
+    # update_financials(connection, "TaiwanStockPrice", columns_list_stockprice, insert_sql_stockprice)
+    # update_financials(connection,  "TaiwanStockBalanceSheet", columns_list_balancesheet, insert_sql_balancesheet)
+    # update_financials(connection, "TaiwanStockCashFlowsStatement", columns_list_cashflow, insert_sql_cashflow)
+    # update_financials(connection, "TaiwanStockFinancialStatements", columns_list_financialstatement, insert_sql_financialstatement)
     # Configure logging
     logging.basicConfig(level = logging.INFO)
     logging.info("Deployment of service confirmed...")
     app.run(host = '0.0.0.0', port = int(os.environ.get('PORT', 8080)))
-    # connection = create_connection(host, user, password, database) #Establish SQL connection
+    
     # Code for creating tables
     # execute_query(connection, create_newstable)
     # execute_query(connection, create_stocktable)
