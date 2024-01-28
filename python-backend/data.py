@@ -590,10 +590,12 @@ def update_financials(connection, dataset, columns_list, insert_sql):
     print(f"Running dataset {dataset}")
     # logging.info(f"Running dataset {dataset}")
     stock_ls = [entry['symbol'] for entry in execute_read_query(connection, "stocks", "SELECT symbol FROM stocks;")]
-    count = 1
+    target = None # CHANGE THIS (to None)
+    stock_ls_index = stock_ls.index(target) if target != None else 0
+    count =  stock_ls.index(target) + 1 if target != None else 1
     max_retries = 5 # set maximum retries
     retry_delay = 13 # in minutes
-    for stock in stock_ls:
+    for stock in stock_ls[stock_ls_index:]: 
         duplicate = execute_read_query(connection, reference_dict[dataset], f"SELECT symbol, date FROM {reference_dict[dataset]} WHERE symbol = '{stock}'")
         duplicate_dict = {} # For storing key-value pair duplicates (e.g. '1101':['2023-09-31', '2024-04-30', ....], ...)
         date_ls = [str(value) for entry in duplicate for key, value in entry.items() if key == 'date']
@@ -648,11 +650,11 @@ def update_financials(connection, dataset, columns_list, insert_sql):
                                     figures[type] = float(entry['value'])
                         date_dict[date] = figures # set key-value pair for dictionary
         
-        # # Remove duplicate entries
-        # for key in list(date_dict.keys()):
-        #     if duplicate_dict.get(stock) != None:
-        #         if key in duplicate_dict[stock]:
-        #             date_dict.pop(key)
+        # Remove duplicate entries
+        for key in list(date_dict.keys()):
+            if duplicate_dict.get(stock) != None:
+                if key in duplicate_dict[stock]:
+                    date_dict.pop(key)
         # Arrange the tuples in order (date_dict is empty if all are duplicates)
         for date in list(date_dict.keys()):
             key_tuple = (stock, date) # stock = symbol & key = date
@@ -898,7 +900,7 @@ columns_list_cashflow = [
 
 columns_list_financialstatement = [
     'Revenue',
-    'CostsOfGoodsSold',
+    'CostOfGoodsSold',
     'GrossProfit',
     'OperatingExpenses',
     'OperatingIncome',
