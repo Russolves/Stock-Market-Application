@@ -1,4 +1,6 @@
 python-backend/stockmarketdatabasekey.json
 python-backend/.env
+python-backend/short_term_model.pth
+python-backend/long_term_model.pth
 js-backend/.env
 js-backend/node_modules
