@@ -3,7 +3,10 @@ import os
 import mysql.connector
 from mysql.connector import Error
 from dotenv import load_dotenv
-import matplotlib as pyplot # Version 3.8.0
+import matplotlib.pyplot as plt # Version 3.8.0
+import matplotlib.dates as mdates
+from matplotlib.font_manager import FontProperties
+from datetime import datetime
 from sklearn.preprocessing import MinMaxScaler # Version 1.4.0
 import pandas as pd # Version 2.1.4
 import numpy as np # Version 1.26.0
@@ -172,7 +175,7 @@ def impute_financials(df):
       if last_non_null is not None:
           df[col].loc[last_non_null:] = df[col].loc[last_non_null]
   # Fill in-between values based on the previous available entry
-  df.fillna(method='ffill', inplace=True)
+  df.ffill(inplace = True) # df.fillna(method='ffill', inplace=True)
   print("Impute financials process completed!")
   return df
 # Function for filling a dataframe up based on the first non-NaN value found within each individual column
@@ -403,8 +406,11 @@ if __name__ == "__main__":
     num_layers = 2  # Example value
 
     total_rows = len(merged_df)
-    short_test = merged_df.iloc[-365-30:-30] # A year + 30 days back
-    long_test = merged_df.iloc[-1460:-365] # Three years + 365 days back
+    short_start, long_start = -365-30, -1460 # One year & Three years
+    short_pred = -30 # 30 days back
+    long_pred = -365 # 365 days back
+    short_test = merged_df.iloc[short_start:short_pred] # A year + 30 days back
+    long_test = merged_df.iloc[long_start:long_pred] # Three years + 365 days back
     # Normalize features first
     # Select columns to normalize, excluding 'Date' and the target column 'open'
     feature_columns = [col for col in short_test.columns if col != 'open']
@@ -439,24 +445,76 @@ if __name__ == "__main__":
     with torch.no_grad():
         short_predictions = short_model(short_data)
     # Inverse normalization
-    prediction = target_scaler.inverse_transform(short_predictions).tolist() # convert to list format
-    # actual = merged_df['open'].iloc[-30:].values.tolist() # convert to list format
-    print(merged_df['open'].iloc[-30:])
-    print(f"Predictions:{prediction}")
+    short_prediction = target_scaler.inverse_transform(short_predictions).tolist()[0] # convert to list data type
+    short_actual = merged_df['open'].iloc[short_start:].values.tolist() # convert to list data type
+    # print(merged_df['open'].iloc[short_pred:])
 
-    # # For long term model
-    # long_batch_size = 64
-    # long_seq_length = 365*3 # 3 years (anything more than that can lead to not having enough validation data)
-    # long_prediction_window = 365
-    # long_term = 'long_term_model.pth'
-    # # Long term Model
-    # long_model = StockPredictor(input_dim, hidden_dim, num_layers, long_prediction_window)
-    # if long_term in os.listdir():
-    #     if torch.cuda.is_available():
-    #         long_model.load_state_dict(torch.load(long_term))
-    #     else:
-    #         long_model.load_state_dict(torch.load(long_term, map_location=torch.device('cpu')))
-    #     long_model.eval()
-    # else:
-    #     raise Exception("No long term model state dict found")
-    # train_model_with_batches(long_model, train_df, validation_df, epochs, long_term, long_seq_length, long_prediction_window, long_batch_size, interest, i + 1, len(symbol_ls), target_scaler)
+    # For long term model
+    long_seq_length = 365*3 # 3 years (anything more than that can lead to not having enough validation data)
+    long_prediction_window = 365
+    long_term = 'long_term_model.pth'
+    # Long term Model
+    long_model = StockPredictor(input_dim, hidden_dim, num_layers, long_prediction_window)
+    if long_term in os.listdir():
+        if torch.cuda.is_available():
+            long_model.load_state_dict(torch.load(long_term))
+        else:
+            long_model.load_state_dict(torch.load(long_term, map_location=torch.device('cpu')))
+        long_model.eval()
+    else:
+        print(os.listdir())
+        raise Exception("No long term model state dict found")
+    long_data_np = long_df.values # This converts DataFrame to 2D NumPy Array (for prediction)
+    long_data = torch.tensor([long_data_np], dtype = torch.float32)
+    # Predict
+    with torch.no_grad():
+        long_predictions = long_model(long_data)
+    # Inverse normalization
+    long_prediction = target_scaler.inverse_transform(long_predictions).tolist()[0] # convert to list data type
+    long_actual = merged_df['open'].iloc[long_start:].values.tolist() # convert to list data type
+
+    # Graph them
+    print(f"Full date range length: {len(full_date_range)}")
+    # Set font properties for Chinese characters
+    font = FontProperties(fname=r'SimSun.ttf', size=12)  # Adjust the path to your font file
+    plt.rcParams['font.family'] = font.get_name()
+    actual_short_dates = full_date_range[short_start:]
+    actual_long_dates = full_date_range[long_start:]
+    if not len(short_prediction) == (0-len(short_actual)) + (len(short_actual)-short_pred):
+        print()
+        print(f"short_prediction length: {len(short_prediction)}")
+        print(f"short_actual: {len(short_actual)}")
+        raise Exception("Length inconsistencies found between actual data and predictions for short term model")
+    short_dates = full_date_range[short_pred:] # going back certain number of days
+    # Plotting the first line plot (Short Prediction)
+    plt.figure(figsize=(10, 5))  # Creating a figure
+    plt.subplot(2, 1, 1)  # Creating the first subplot
+    plt.plot(actual_short_dates, short_actual, label=f"{shortname} 實際股價", color = 'blue')  # Plotting the first line
+    plt.plot(short_dates, short_prediction, label = f"AI 預測股價", color = 'red')
+    plt.xlabel('日期', fontproperties = font)
+    plt.ylabel('股價', fontproperties = font)
+    plt.title(f"{longname} AI 短期股價趨勢預測比對", fontproperties = font)
+    plt.legend(prop = font)
+    plt.ylim(min(min(short_actual), min(short_prediction)) - 1, max(max(short_actual), max(short_prediction)) + 1) # Specifying a dynamic range for the y-axis
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+
+    if not len(long_prediction) == (0-len(long_actual)) + (len(long_actual)-long_pred):
+        print()
+        print(f"long_prediction length: {len(long_prediction)}")
+        print(f"long_actual: {len(long_actual)}")
+        raise Exception("Length inconsistencies found between actual data and predictions for long term model")
+    long_dates = full_date_range[long_pred:]
+    # Plotting the second line plot
+    plt.subplot(2, 1, 2)  # Creating the second subplot
+    plt.plot(actual_long_dates, long_actual, label=f"{shortname} 實際股價", color = 'blue')  # Plotting the second line
+    plt.plot(long_dates, long_prediction, label = f"AI 預測股價", color = 'red')
+    plt.xlabel('日期')
+    plt.ylabel('股價')
+    plt.title(f"{longname} AI 長期股價趨勢預測比對")
+    plt.legend()
+    plt.ylim(min(min(long_actual), min(long_prediction)) - 1, max(max(long_actual), max(long_prediction)) + 1) # Specifying a dynamic range for the y-axis
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    # Adjusting layout to prevent overlap
+    plt.tight_layout()
+    # Displaying the plots
+    plt.show()
