@@ -439,7 +439,8 @@ if __name__ == "__main__":
     with torch.no_grad():
         short_predictions = short_model(short_data)
     # Inverse normalization
-    prediction = target_scaler.inverse_transform(short_predictions)
+    prediction = target_scaler.inverse_transform(short_predictions).tolist() # convert to list format
+    # actual = merged_df['open'].iloc[-30:].values.tolist() # convert to list format
     print(merged_df['open'].iloc[-30:])
     print(f"Predictions:{prediction}")
 
