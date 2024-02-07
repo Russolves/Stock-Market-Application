@@ -4,3 +4,6 @@ python-backend/short_term_model.pth
 python-backend/long_term_model.pth
 js-backend/.env
 js-backend/node_modules
+StockMarketApp/node_modules
+StockMarketApp/.expo
+StockMarketApp/.gitignore
