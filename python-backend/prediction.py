@@ -232,12 +232,16 @@ def normalize_features(df, feature_columns):
     return df, scaler
 
 class StockPredictor(nn.Module):  # Assuming this is your LSTM model class
-    def __init__(self, input_dim, hidden_dim, num_layers, prediction_window):
+    def __init__(self, input_dim, hidden_dim, num_layers, prediction_window, dropout_rate = 0.5):
         super(StockPredictor, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         # self.prediction_window = prediction_window
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
+        # LSTM layer with dropout
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout_rate if num_layers > 1 else 0)
+        # Dropout layer
+        self.dropout = nn.Dropout(dropout_rate)
+        # self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_dim, prediction_window)
 
     def forward(self, x):
@@ -267,7 +271,7 @@ if __name__ == "__main__":
         connection = create_connection(host, user, password, database) # Establish SQL connection
         symbols = execute_read_query(connection, 'stocks', "SELECT symbol, shortname FROM stocks;")
         symbol_dict = {entry['symbol']:entry['shortname'] for entry in symbols} # {'2330':'台積電', '2392':'...}
-        interest = '2330' # Stock symbol of interest
+        interest = '2308' # Stock symbol of interest
         basic_info_dict = execute_read_query(connection, 'stocks', f"SELECT shortname, longname FROM stocks WHERE symbol = '{interest}';")
         shortname = basic_info_dict[0].get('shortname')
         longname = basic_info_dict[0].get('longname')
@@ -402,8 +406,8 @@ if __name__ == "__main__":
     merged_df.drop('Date', axis = 1, inplace = True) # drop the 'Date ' column
     # Adjust these values based on your dataset
     input_dim = len(merged_df.columns)
-    hidden_dim = 50  # Example value
-    num_layers = 2  # Example value
+    hidden_dim = 150  # Example value
+    num_layers = 3  # Example value
 
     total_rows = len(merged_df)
     short_start, long_start = -365-30, -1460 # One year & Three years
@@ -425,7 +429,6 @@ if __name__ == "__main__":
     # Commence Prediction
     short_seq_length = 365
     short_prediction_window = 30
-    epochs = 10
     short_term = 'short_term_model.pth'
     # Short term Model
     short_model = StockPredictor(input_dim, hidden_dim, num_layers, short_prediction_window)
@@ -508,10 +511,10 @@ if __name__ == "__main__":
     plt.subplot(2, 1, 2)  # Creating the second subplot
     plt.plot(actual_long_dates, long_actual, label=f"{shortname} 實際股價", color = 'blue')  # Plotting the second line
     plt.plot(long_dates, long_prediction, label = f"AI 預測股價", color = 'red')
-    plt.xlabel('日期')
-    plt.ylabel('股價')
-    plt.title(f"{longname} AI 長期股價趨勢預測比對")
-    plt.legend()
+    plt.xlabel('日期', fontproperties=font)
+    plt.ylabel('股價', fontproperties=font)
+    plt.title(f"{longname} AI 長期股價趨勢預測比對", fontproperties=font)
+    plt.legend(prop = font)
     plt.ylim(min(min(long_actual), min(long_prediction)) - 1, max(max(long_actual), max(long_prediction)) + 1) # Specifying a dynamic range for the y-axis
     plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
     # Adjusting layout to prevent overlap
