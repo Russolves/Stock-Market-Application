@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Alert, TextInput } from 'react-native';
-import Button from '../components/Button';
+import Button from '../components/Button1';
 
 export default function HomeScreen({ navigation }) {
   // state
@@ -18,19 +18,22 @@ export default function HomeScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, {backgroundColor: 'dimgray'}]}>
       <Intro/>
-      <Text style={styles.title}>Welcome to the Stock Market App</Text>
-      <Button
+      <Text style={[styles.title, {color:'white'}]}>Welcome to the Stock Market App</Text>
+      {/* <Button
         title="Go to Details"
         onPress={() => navigation.navigate('Details')}
-      />
+      /> */}
   
       <TextInput
-        style={styles.input}
+        style={[styles.input, {color:'white'}]}
         onChangeText={(name) => setusername(name)}
         placeholder="Enter Username"
+        placeholderTextColor='white'
       />
+      {/* // This adds a vertical space of 20 units ('width' also available) */}
+      <View style={{height: 20}} ></View>
       <Button
         title="Clear Name"
         onPress={handlePress}
@@ -44,10 +47,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   title: {
     fontSize: 20,
-    marginBottom: 20,
+    marginBottom: 20
   },
 });
