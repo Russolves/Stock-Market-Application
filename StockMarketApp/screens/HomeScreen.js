@@ -1,30 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert, TextInput, useColorScheme } from 'react-native';
+import {VictoryLine, VictoryChart, VictoryAxis} from 'victory-native';
 import Button from '../components/Button1';
-import { fetchData } from '../util/api';
+import { MarketChart } from '../components/MarketChart';
+import { fetchData, fetch_UniqueMarketIndex, fetch_marketPrice } from '../util/api';
 
 export default function HomeScreen({ navigation }) {
   const scheme = useColorScheme(); // detect system color scheme
   // state
   const [username, setusername] = useState('');
-  const [djia, changedjia] = useState([]);
-  // function for calling API
+  const [djia, changedjia] = useState({});
+
+  // function for initially calling market index APIs
   async function retrieve_marketindex() {
-    console.log('Entering retrieve market index');
-    let query = "SELECT DISTINCT index_symbol FROM marketindex";
-    const unique_index = await fetchData(query);
+    const unique_index = await fetch_UniqueMarketIndex();
     const unique_ls = unique_index.map(item => item.index_symbol);
     // console.log('Unique List:', unique_ls);
+    let market = {}; // initialize empty javascript object
     for (let i = 0; i < unique_ls.length; i++) {
-      query = `SELECT date, close FROM marketindex WHERE index_symbol = '${unique_ls[i]}'`
-      const market_data = await fetchData(query);
+      const market_data = await fetch_marketPrice(unique_ls[i]);
+      market[unique_ls[i]] = market_data
     };
-
+    changedjia(market);
   };
-   // Call fetchData when the component mounts
+   // Call fetchData when the component mounts (onMount)
   useEffect(() => {
     retrieve_marketindex();
   }, []); // Empty dependency array means this effect runs once on mount
+  useEffect(() => {
+    console.log('DJIA:', djia);
+  }, [djia]); // hook to log 'djia' value when it changes
 
   // function for handling button press
   function handlePress () {
@@ -61,6 +66,8 @@ export default function HomeScreen({ navigation }) {
       />
       {username && <Text>{username}</Text>}
       {/* <Text>{scheme}</Text> */}
+
+      <MarketChart stockData={djia} />
     </View>
   );
 }
