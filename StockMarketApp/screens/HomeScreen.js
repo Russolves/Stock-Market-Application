@@ -44,27 +44,26 @@ export default function HomeScreen({ navigation }) {
   };
   return (
     <View style={[styles.container, {backgroundColor: 'aliceblue'}]}>
-      <Intro/>
-      <Text style={[styles.title, {color:'black'}]}>Welcome to the Stock Market App</Text>
+      {/* <Intro/> */}
+      {/* <Text style={[styles.title, {color:'black'}]}>Welcome to the Stock Market App</Text> */}
       {/* <Button
         title="Go to Details"
         onPress={() => navigation.navigate('Details')}
       /> */}
   
-      <TextInput
+      {/* <TextInput
         style={[styles.input, {color:'black'}]}
         onChangeText={(name) => setusername(name)}
         value={username} // ensure that the value displayed reflects the reactive variable
         placeholder="Enter Username"
         placeholderTextColor='black'
-      />
+      /> */}
       {/* // This adds a vertical space of 20 units ('width' also available) */}
-      <View style={{height: 20}} ></View>
+      {/* <View style={{height: 20}} ></View>
       <Button
         title="Clear Name"
         onPress={handlePress}
-      />
-      {username && <Text>{username}</Text>}
+      /> */}
       {/* <Text>{scheme}</Text> */}
 
       <MarketChart stockData={djia} />
