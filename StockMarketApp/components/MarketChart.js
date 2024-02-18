@@ -50,6 +50,8 @@ export const MarketChart = ({ stockData }) => { // Accept `stockData` as a prop
                 ...item,
                 date: moment(item.date).format('YYYY/M/D') // Format date
             }));
+            const most_recent = data.slice(-1)[0]; // get most recent closing price
+            const recent_price = most_recent['close']
             const average = data.map(obj => parseFloat(obj['close'])) // array of close prices
             const sum = average.reduce((accumulator, currentValue) => accumulator + currentValue);
             const average_value = sum/data.length; 
@@ -61,6 +63,17 @@ export const MarketChart = ({ stockData }) => { // Accept `stockData` as a prop
                 obj["average"] = average_value;
                 market_average.push(obj);
             };
+            // calculate percentage decrease from past year average
+            const percentage_difference = (((recent_price - average_value)/average_value)*100).toFixed(2);
+            function Negative() {
+                let display = '';
+                if (percentage_difference >= 0) {
+                    display = '+' + percentage_difference.toString() + '%';
+                    return <Text>{display}</Text>
+                }
+                display = percentage_difference.toString() + '%';
+                return <Text>{display}</Text>
+            };
             const display_name = names["Market"][marketName]["chinese"]; // using chinese full name for now
             return (
                 <View key={marketName} style={styles.barchart}>
@@ -69,6 +82,9 @@ export const MarketChart = ({ stockData }) => { // Accept `stockData` as a prop
                     <View style={styles.chartRow}>
                         <View style={styles.textColumn}>
                             <Text>{display_name}</Text>
+                            <Text>{recent_price}</Text>
+                            <Negative />
+                            {/* <Text>{percentage_difference}</Text> */}
                         </View>
                         <View style={styles.chartColumn}>
                             <VictoryChart
