@@ -795,7 +795,7 @@ def update_currentprice(connection, interval = 5):
         # logging.info(f"Updating {symbol}: Count {count} of {len(symbol_ls)}")
         sql_query = f"SELECT datetime, price FROM currentprice WHERE symbol = '{symbol}';"
         stock_data = execute_read_query(connection, 'currentprice', sql_query) # list of dictionaries
-        if stock_data != None and len(stock_data) >= 1674: # this number because 54 entries a day (market open to close) and 31 days per month
+        if stock_data != None and len(stock_data) >= 1620: # this number because 54 entries a day (market open to close) and 30 days per month
             # delete the earliest entry for the stock
             sql_delete = f"""
             DELETE FROM currentprice
