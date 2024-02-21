@@ -9,6 +9,9 @@
 .gcloudignore
 long_term_model.pth
 short_term_model.pth
+prediction.py
+SimSun.ttf
+stockmarketdatabasekey.json
 # If you would like to upload your .git directory, .gitignore file or files
 # from your .gitignore file, remove the corresponding line
 # below:
