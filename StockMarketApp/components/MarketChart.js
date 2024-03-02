@@ -135,7 +135,7 @@ export const MarketChart = ({ stockData }) => { // Accept `stockData` as a prop
         });
         // Return a fragment containing all charts
         return (<ScrollView style={styles.scrollView}>{charts}</ScrollView>);
-    }    
+    }
     // useEffect(() => {
     //     return parsedStockData;
     //   }, [parsedStockData]);
