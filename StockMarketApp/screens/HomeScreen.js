@@ -7,7 +7,7 @@ import { fetchData, fetch_UniqueMarketIndex, fetch_marketPrice } from '../util/a
 
 export default function HomeScreen({ navigation }) {
   const scheme = useColorScheme(); // detect system color scheme
-  // state
+  // state variables
   const [username, setusername] = useState('');
   const [djia, changedjia] = useState({});
 

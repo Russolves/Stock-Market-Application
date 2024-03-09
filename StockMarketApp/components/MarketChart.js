@@ -10,6 +10,8 @@ export const MarketChart = ({ stockData }) => { // Accept `stockData` as a prop
     // if (stockData.length === 0) {
     // return <Text>Loading chart data...</Text>;
     // }
+
+    // state variables used for display [variable, function_to_set_variable]
     const [parsedStockData, setparsedStockData] = useState([]);
     const props = Platform.select({
         web: {},
