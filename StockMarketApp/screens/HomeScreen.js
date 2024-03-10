@@ -6,7 +6,7 @@ import { MarketChart } from '../components/MarketChart';
 import { fetchData, fetch_UniqueMarketIndex, fetch_marketPrice } from '../util/api';
 
 export default function HomeScreen({ navigation }) {
-  const scheme = useColorScheme(); // detect system color scheme
+  const scheme = useColorScheme(); // detect system color scheme (can be used for future theme references)
   // state variables
   const [username, setusername] = useState('');
   const [djia, changedjia] = useState({});

@@ -48,7 +48,7 @@ app.get('/', (req, res) => {
 })
 // send GET request to database (stocks table)
 app.get('/stocks', (req, res) => {
-    const symbol = req.headers['symbol']; // Header example: {'Symbol':'2330}
+    const symbol = req.headers['symbol']; // Header example: {'Symbol':'2330'}
     // console.log('This is the requested symbol:', symbol);
     try{
         pool.query(`SELECT * FROM stocks WHERE symbol = '${symbol}'`, (err, results, fields) => {
@@ -63,7 +63,8 @@ app.get('/stocks', (req, res) => {
         console.log('SQL select error during GET request /stocks:', Error);
     };
 });
-// send GET request based on Front end
+
+// send POST request based on Front end requirements
 app.post('/retrieve', (req, res) => {
     const query = req.body['query'];
     console.log('/retrieve API endpoint called!', query);
