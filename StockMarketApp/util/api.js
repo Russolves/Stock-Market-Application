@@ -3,6 +3,7 @@ let post_options = {
     method: 'POST',
     headers: {'Content-Type':'application/json'}
 };
+// POST request allowing for dynamic SQL query specification
 export async function fetchData(query) {
     const url = link + '/retrieve' // if connected to kevin_1st
     const payload = {
@@ -22,6 +23,7 @@ export async function fetchData(query) {
         console.log('Something went wrong with the dynamic api call:', error);
     }
 };
+// function to retrieve all distinct indexes within marketindex table
 export async function fetch_UniqueMarketIndex() {
     const url = link + '/retrieve';
     const payload = {'query':"SELECT DISTINCT index_symbol FROM marketindex"};
@@ -34,10 +36,11 @@ export async function fetch_UniqueMarketIndex() {
         console.log('Something went wrong with the fetch_UniqueMarketIndex() API call');
     }
 };
+// function to retrieve date and close prices from marketindex (specify index symbol)
 export async function fetch_marketPrice(index) {
     const url = link + '/retrieve';
     const payload = {'query':"SELECT date, close FROM marketindex WHERE index_symbol = '" + index + "'"};
-    post_options.body = JSON.stringify(payload);
+    post_options.body = JSON.stringify(payload); // [{'date':'XXXX-XX-XX', 'close': XX.X}, {'date': 'XXXX-XX-XX', 'close': XX.X}, ...]
     try{
         const response = await fetch(url, post_options);
         const data = await response.json();
