@@ -3,7 +3,7 @@ let post_options = {
     method: 'POST',
     headers: {'Content-Type':'application/json'}
 };
-// POST request allowing for dynamic SQL query specification
+// POST request allowing for dynamic SQL queries
 export async function fetchData(query) {
     const url = link + '/retrieve' // if connected to kevin_1st
     const payload = {
