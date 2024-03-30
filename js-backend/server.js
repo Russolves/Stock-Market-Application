@@ -31,7 +31,7 @@ let pool;
 try{
     pool = mysql.createPool({ // access through environment variables
         // host:process.env.DB_HOST, // use this for local development
-        socketPath: `/cloudsql/${process.env.INSTANCE_CONNECTION_NAME}`, // use this for gcloud
+        socketPath: `/cloudsql/${process.env.INSTANCE_CONNECTION_NAME}`, // use this for gcloud app
         user:process.env.DB_USER,
         password:process.env.DB_PASSWORD,
         database:process.env.DB_NAME,
