@@ -21,7 +21,7 @@ export default function HomeScreen({ navigation }) {
       const market_data = await fetch_marketPrice(unique_ls[i]);
       market[unique_ls[i]] = market_data
     };
-    changedjia(market);
+    changedjia(market); // set dynamic state variable javascript object
   };
    // Call fetchData when the component mounts (onMount)
   useEffect(() => {
