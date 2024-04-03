@@ -23,6 +23,7 @@ export async function fetchData(query) {
         console.log('Something went wrong with the dynamic api call:', error);
     }
 };
+// Change all '/retrieve' function endpoints below to prevent hostile SQL queries from being executed that can affect database
 // function to retrieve all distinct indexes within marketindex table
 export async function fetch_UniqueMarketIndex() {
     const url = link + '/retrieve';
