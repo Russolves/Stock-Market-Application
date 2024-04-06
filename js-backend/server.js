@@ -66,7 +66,7 @@ app.get('/stocks', (req, res) => {
 
 // send dynamic SQL POST request based on front end requirements (change into separate API endpoints later on)
 app.post('/retrieve', (req, res) => {
-    const query = req.body['query'];
+    const query = req.body['query']; // request body format: {query: 'SELECT * FROM...'}
     console.log('/retrieve API endpoint called!', query);
     try{
         pool.query(query, (err, results, fields) => {
