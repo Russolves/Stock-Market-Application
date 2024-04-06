@@ -3,7 +3,7 @@ const app = express();
 const mysql = require('mysql2');
 
 app.use(express.json()); // for parsing application/json
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3000; // use port available when hosting on gcloud app engine or 3000 when local testing
 app.listen(port, () => { // print where server is running (for local production environment)
     console.log(`Server running on port ${port}`);
 })
