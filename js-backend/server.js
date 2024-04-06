@@ -13,7 +13,7 @@ app.use(cors({
     origin: function (origin, callback) {
         // Define a whitelist of allowed origins
         const whitelist = [
-            'http://localhost:8081'
+            'http://localhost:8081' // only allow requests from local environment for now
         ];
         
         if (!origin || whitelist.indexOf(origin) !== -1) {
