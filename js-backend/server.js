@@ -42,7 +42,7 @@ try{
 } catch (error) {
     console.log('Error for server:', error);
 }
-// GET request confirmation for server status (default)
+// GET request confirmation for server status
 app.get('/', (req, res) => {
     res.status(200).send('Backend server GET request successful!');
 })
