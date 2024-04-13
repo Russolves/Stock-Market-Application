@@ -37,7 +37,7 @@ export async function fetch_UniqueMarketIndex() {
         console.log('Something went wrong with the fetch_UniqueMarketIndex() API call');
     }
 };
-// function to retrieve date and close prices from marketindex (specify index symbol)
+// function to retrieve date and close prices from marketindex table (specify index symbol)
 export async function fetch_marketPrice(index) {
     const url = link + '/retrieve';
     const payload = {'query':"SELECT date, close FROM marketindex WHERE index_symbol = '" + index + "'"};
