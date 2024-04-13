@@ -35,7 +35,7 @@ export default function HomeScreen({ navigation }) {
   function handlePress () {
     setusername('');
   };
-  // if function example
+  // HTML if function example
   function Intro() {
     if (username !== null || username === '') {
       return <Text style={styles.title}>Hello there {username}!</Text>;
