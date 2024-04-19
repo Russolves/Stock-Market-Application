@@ -138,7 +138,7 @@ export const MarketChart = ({ stockData }) => { // Accept `stockData` as a prop
         // Return a fragment containing all charts
         return (<ScrollView style={styles.scrollView}>{charts}</ScrollView>);
     }
-    // // this is run when the page is first rendered (onMount)
+    // // this is run when the page is rendered (onMount)
     // useEffect(() => {
     //     return parsedStockData;
     //   }, [parsedStockData]);
