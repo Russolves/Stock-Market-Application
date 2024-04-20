@@ -23,7 +23,7 @@ export default function HomeScreen({ navigation }) {
     };
     changedjia(market); // set dynamic state variable javascript object
   };
-   // Call fetchData when the component mounts (onMount)
+   // Call the fetchData function (api.js) when the component mounts (onMount)
   useEffect(() => {
     retrieve_marketindex();
   }, []); // Empty dependency array means this effect runs once on mount
