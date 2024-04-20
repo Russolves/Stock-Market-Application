@@ -29,7 +29,7 @@ export default function HomeScreen({ navigation }) {
   }, []); // Empty dependency array means this effect runs once on mount
   useEffect(() => {
     console.log('DJIA:', djia);
-  }, [djia]); // hook to log 'djia' value when it changes
+  }, [djia]); // hook to log 'djia' value whenever its value changes
 
   // function for handling button press
   function handlePress () {
