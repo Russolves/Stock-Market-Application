@@ -26,7 +26,7 @@ export default function HomeScreen({ navigation }) {
    // Call the fetchData function (api.js) when the component mounts (onMount)
   useEffect(() => {
     retrieve_marketindex();
-  }, []); // Empty dependency array means this effect runs once on m
+  }, []); // Empty dependency array means this effect runs once on mo
   useEffect(() => {
     console.log('DJIA:', djia);
   }, [djia]); // hook to log 'djia' value whenever its value changes
