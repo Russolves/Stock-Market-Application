@@ -11,7 +11,7 @@ export default function HomeScreen({ navigation }) {
   const [username, setusername] = useState('');
   const [djia, changedjia] = useState({}); // initialize dynamic state variable and function to alter it
 
-  // function for initially calling market index APIs
+  // function for initially calling market index API
   async function retrieve_marketindex() {
     const unique_index = await fetch_UniqueMarketIndex();
     const unique_ls = unique_index.map(item => item.index_symbol);
