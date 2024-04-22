@@ -18,7 +18,7 @@ export default function HomeScreen({ navigation }) {
     // console.log('Unique List:', unique_ls);
     let market = {}; // initialize javascript object
     for (let i = 0; i < unique_ls.length; i++) {
-      const market_data = await fetch_marketPrice(unique_ls[i]); // call upon function in api.js
+      const market_data = await fetch_marketPrice(unique_ls[i]); // call get function in api.js
       market[unique_ls[i]] = market_data
     };
     changedjia(market); // set dynamic state variable javascript object
