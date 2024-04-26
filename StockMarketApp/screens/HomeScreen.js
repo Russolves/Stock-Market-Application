@@ -8,8 +8,8 @@ import { fetchData, fetch_UniqueMarketIndex, fetch_marketPrice } from '../util/a
 export default function HomeScreen({ navigation }) {
   const scheme = useColorScheme(); // detect system color scheme (can be used for future theme references for dark and light themes)
   // state variables
-  const [username, setusername] = useState('');
-  const [djia, changedjia] = useState({}); // initialize dynamic state variable and function to alter it
+  const [username, setusername] = useState(''); // initialize as empty string
+  const [djia, changedjia] = useState({}); // initialize dynamic state variable and function to alter it (djia is a JS object)
 
   // function for initially calling market index APIs
   async function retrieve_marketindex() {
