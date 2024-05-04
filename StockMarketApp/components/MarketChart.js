@@ -6,7 +6,7 @@ import moment from 'moment-timezone';
 import { parse } from 'react-native-svg';
 
 export const MarketChart = ({ stockData }) => { // Accept `stockData` as a prop
-    // // Conditional rendering: Render chart only if `stockData` is not empty
+    // // Conditional rendering Render chart only if `stockData` is not empty
     // if (stockData.length === 0) {
     // return <Text>Loading chart data...</Text>;
     // }
