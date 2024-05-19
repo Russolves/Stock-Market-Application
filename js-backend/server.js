@@ -74,7 +74,7 @@ app.post('/retrieve', (req, res) => {
                 res.status(500).send('Something went wrong with the dynamic API call for the "GET" request:', err);
             } else {
                 // console.log(`Query successfully executed: ${results}`)
-                res.status(200).json(results)
+                res.status(200).json(results);
             }
         })
     } catch (Error) {
