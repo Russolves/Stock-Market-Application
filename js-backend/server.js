@@ -15,7 +15,7 @@ app.use(cors({
         const whitelist = [
             'http://localhost:8081' // only allow requests from local environment for now
         ];
-        
+
         if (!origin || whitelist.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
@@ -28,13 +28,13 @@ app.use(cors({
 
 require('dotenv').config(); // import the dotenv library
 let pool;
-try{
+try {
     pool = mysql.createPool({ // access through environment variables
         // host:process.env.DB_HOST, // use this for local development
         socketPath: `/cloudsql/${process.env.INSTANCE_CONNECTION_NAME}`, // use this for gcloud app
-        user:process.env.DB_USER,
-        password:process.env.DB_PASSWORD,
-        database:process.env.DB_NAME,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME,
         waitForConnections: true,
         connectionLimit: 10, // set connection limit
         queueLimit: 0
@@ -50,7 +50,7 @@ app.get('/', (req, res) => {
 app.get('/stocks', (req, res) => {
     const symbol = req.headers['symbol']; // Header example: {'Symbol':'2330'}
     // console.log('This is the requested symbol:', symbol);
-    try{
+    try {
         pool.query(`SELECT * FROM stocks WHERE symbol = '${symbol}'`, (err, results, fields) => {
             if (err) {
                 res.status(500).send('Something went wrong with the API call for the "stocks" table:', err);
@@ -68,7 +68,7 @@ app.get('/stocks', (req, res) => {
 app.post('/retrieve', (req, res) => {
     const query = req.body['query']; // request body format: {query: 'SELECT * FROM...'}
     console.log('/retrieve API endpoint called!', query);
-    try{
+    try {
         pool.query(query, (err, results, fields) => {
             if (err) {
                 res.status(500).send('Something went wrong with the dynamic API call for the "GET" request:', err);
