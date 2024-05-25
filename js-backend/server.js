@@ -46,7 +46,7 @@ try {
 app.get('/', (req, res) => {
     res.status(200).send('Backend server GET request successful!');
 })
-// send GET request to database (stocks table, specify symbol
+// send GET request to database (stocks table, specify symbol)
 app.get('/stocks', (req, res) => {
     const symbol = req.headers['symbol']; // Header example: {'Symbol':'2330'}
     // console.log('This is the requested symbol:', symbol);
