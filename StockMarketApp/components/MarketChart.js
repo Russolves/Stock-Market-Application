@@ -50,7 +50,7 @@ export const MarketChart = ({ stockData }) => { // Accept `stockData` as a prop
         const charts = marketNames.map(marketName => {
             let data = filterRecentData(stockData[marketName]).map(item => ({
                 ...item,
-                date: moment(item.date).format('YYYY/M/D') // Format Date
+                date: moment(item.date).format('YYYY/M/D') // Format date
             }));
             const most_recent = data.slice(-1)[0]; // get most recent closing price
             const recent_price = most_recent['close']
