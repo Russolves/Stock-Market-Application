@@ -52,7 +52,7 @@ export const MarketChart = ({ stockData }) => { // Accept `stockData` as a prop
                 ...item,
                 date: moment(item.date).format('YYYY/M/D') // Format date
             }));
-            const most_recent = data.slice(-1)[0]; // get most
+            const most_recent = data.slice(-1)[0]; // get most recent
             const recent_price = most_recent['close']
             const average = data.map(obj => parseFloat(obj['close'])) // array of close prices
             const sum = average.reduce((accumulator, currentValue) => accumulator + currentValue);
