@@ -33,7 +33,7 @@ export const MarketChart = ({ stockData }) => { // Accept `stockData` as a prop
         // const startDate = endDate.clone().subtract(days, 'days');
         // return data.filter(item => {
         //     const itemDate = moment(item.Date);
-        //     return itemDate.isBetween(startDate, endDate, null, '[]'); // inclusive
+        //     return itemDate.isBetween(startDate, endDate, null, '[]'); // incl
         // })
         return data.slice(-365);
     };
