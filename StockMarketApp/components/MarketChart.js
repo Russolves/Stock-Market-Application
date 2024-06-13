@@ -27,7 +27,7 @@ export const MarketChart = ({ stockData }) => { // Accept `stockData` as a prop
         '^HSI',
         '^N225'
     ];
-    // function for filtering for recent (365 days) of d
+    // function for filtering for recent (365 days) of da
     function filterRecentData(data) {
         // const endDate = moment(); // today
         // const startDate = endDate.clone().subtract(days, 'days');
